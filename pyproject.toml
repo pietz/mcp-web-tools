@@ -1,0 +1,42 @@
+[project]
+name = "mcp-web-tools"
+version = "0.1.0"
+description = "A powerful MCP server to equip LLMs with web access, search, and content extraction capabilities"
+readme = "README.md"
+authors = [
+    { name = "Paul-Louis Pröve", email = "mail@plpp.de" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Text Processing :: Markup",
+]
+keywords = ["mcp", "llm", "web", "search", "extraction", "pdf"]
+dependencies = [
+    "brave-search-python-client>=0.4.27",
+    "duckduckgo-search>=8.0.2",
+    "googlesearch-python>=1.3.0",
+    "mcp>=1.9.0",
+    "psutil>=7.0.0",
+    "pymupdf4llm>=0.0.24",
+    "trafilatura>=2.0.0",
+    "zendriver>=0.7.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/pietz/mcp-web-tools"
+Issues = "https://github.com/pietz/mcp-web-tools/issues"
+
+[project.scripts]
+mcp-web-tools = "mcp_web_tools:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
