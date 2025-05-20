@@ -15,10 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def load_webpage(
-    url: str, 
-    limit: int = 10_000, 
-    offset: int = 0, 
-    raw: bool = False
+    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
 ) -> str:
     """
     Fetch the content from a URL and return it in cleaned Markdown format.
@@ -32,16 +29,18 @@ async def load_webpage(
     """
     try:
         async with asyncio.timeout(10):
-            # Initialize with None to handle errors in finally block
+            # Initialize html and browser to None
+            html = None
             browser = None
+            
+            # First try: Use zendriver
             try:
                 browser = await zd.start(headless=True, sandbox=False)
                 page = await browser.get(url)
                 await page.wait_for_ready_state("complete", timeout=5)
                 html = await page.get_content()
             except Exception as e:
-                logger.error(f"Error fetching page with zendriver: {str(e)}")
-                return f"Error: Failed to retrieve page content: {str(e)}"
+                logger.warning(f"Error fetching page with zendriver: {str(e)}, trying trafilatura next")
             finally:
                 # Ensure browser is closed even if an error occurs
                 if browser:
@@ -49,10 +48,21 @@ async def load_webpage(
                         await browser.stop()
                     except Exception:
                         pass  # Ignore errors during browser closing
-
+            
+            # Second try: Use trafilatura's fetch_url if zendriver failed
             if not html:
-                logger.error(f"Received empty HTML from {url}")
-                return f"Error: Retrieved empty content from {url}"
+                try:
+                    logger.info(f"Attempting to fetch {url} with trafilatura")
+                    html = trafilatura.fetch_url(url)
+                    if not html:
+                        logger.error(f"Failed to fetch {url} with trafilatura")
+                except Exception as e:
+                    logger.error(f"Error fetching page with trafilatura: {str(e)}")
+            
+            # If both methods failed, return error
+            if not html:
+                logger.error(f"Failed to retrieve content from {url} using both zendriver and trafilatura")
+                return f"Error: Failed to retrieve page content from {url} using multiple methods"
 
             if raw:
                 res = html[offset : offset + limit]
@@ -88,10 +98,7 @@ async def load_webpage(
 
 
 async def load_pdf_document(
-    url: str, 
-    limit: int = 10_000, 
-    offset: int = 0, 
-    raw: bool = False
+    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
 ) -> str:
     """
     Fetch a PDF file from the internet and extract its content.
@@ -107,7 +114,7 @@ async def load_pdf_document(
         async with asyncio.timeout(15):  # Allow more time for PDFs which can be large
             res = httpx.get(url, follow_redirects=True, timeout=10)
             res.raise_for_status()
-            
+
             try:
                 doc = pymupdf.Document(stream=res.content)
                 if raw:
@@ -116,26 +123,30 @@ async def load_pdf_document(
                 else:
                     content = pymupdf4llm.to_markdown(doc)
                 doc.close()
-                
+
                 if not content or content.strip() == "":
                     logger.warning(f"Extracted empty content from PDF at {url}")
                     return f"Warning: PDF was retrieved but no text content could be extracted from {url}"
-                    
+
                 result = content[offset : offset + limit]
                 if len(content) > offset + limit:
                     result += f"\n\n---Showing {offset} to {min(offset + limit, len(content))} out of {len(content)} characters.---"
                 return result
-                
+
             except Exception as e:
                 logger.error(f"Error processing PDF content: {str(e)}")
                 return f"Error: PDF was downloaded but could not be processed: {str(e)}"
-            
+
     except asyncio.TimeoutError:
         logger.error(f"Request timed out after 15 seconds for PDF URL: {url}")
         return f"Error: Request timed out after 15 seconds for PDF URL: {url}"
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error {e.response.status_code} when fetching PDF from {url}")
-        return f"Error: HTTP status {e.response.status_code} when fetching PDF from {url}"
+        logger.error(
+            f"HTTP error {e.response.status_code} when fetching PDF from {url}"
+        )
+        return (
+            f"Error: HTTP status {e.response.status_code} when fetching PDF from {url}"
+        )
     except Exception as e:
         logger.error(f"Error loading PDF: {str(e)}")
         return f"Error loading PDF: {str(e)}"
@@ -159,8 +170,8 @@ async def load_image_file(url: str) -> Image:
                 raise ValueError(f"Error: Could not fetch image from {url}")
 
             img = PILImage.open(io.BytesIO(res.content))
-            if max(img.size) > 1600:
-                img.thumbnail((1600, 1600))
+            if max(img.size) > 1024:
+                img.thumbnail((1024, 1024))
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
             return Image(data=buffer.getvalue(), format="png")
