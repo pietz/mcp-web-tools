@@ -10,7 +10,27 @@ I created this package out of the frustration that most MCP servers enabling web
 - [x] Sophisticated fetching for more complex JavaScript sites
 - [x] Extracting content in nicely formatted Markdown
 - [x] Support for extracting content from PDFs
+- [x] Support for loading and displaying images
 - [x] Usage options for advanced cases like loading raw HTML
+
+## Installation
+
+### Claude Desktop
+
+```json
+```
+
+### Claude Code
+
+```bash
+claude mcp add web-tools uvx mcp-web-tools
+```
+
+Or to also set the Brave Search API key:
+
+```bash
+claude mcp add web-tools uvx mcp-web-tools -e BRAVE_SEARCH_API_KEY=<key>
+```
 
 
 ## Internals
