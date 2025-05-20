@@ -3,7 +3,7 @@ from pydantic import Field
 
 from mcp.server.fastmcp import FastMCP, Image
 
-from .search import search_web
+from .search import web_search
 from .loaders import load_webpage, load_pdf_document, load_image_file
 
 # Set up logging
@@ -34,7 +34,7 @@ def help() -> str:
 
 
 @mcp.tool()
-async def web_search(
+async def search_web(
     query: str = Field(description="The search query to use."),
     limit: int = Field(10, le=30, description="Max. number of results to return."),
     offset: int = Field(0, ge=0, description="Result offset to start returning from."),
@@ -44,7 +44,7 @@ async def web_search(
     Tries to use Brave first, then Google, finally DuckDuckGo as fallbacks.
     Returns a list of the title, URL, and description of each result.
     """
-    return await search_web(query, limit, offset)
+    return await web_search(query, limit, offset)
 
 
 @mcp.tool()
