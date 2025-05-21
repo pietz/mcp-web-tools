@@ -1,6 +1,8 @@
 import asyncio
 import io
 import logging
+import os
+import re
 from PIL import Image as PILImage
 import httpx
 
@@ -32,7 +34,7 @@ async def load_webpage(
             # Initialize html and browser to None
             html = None
             browser = None
-            
+
             # First try: Use zendriver
             try:
                 browser = await zd.start(headless=True, sandbox=False)
@@ -40,7 +42,9 @@ async def load_webpage(
                 await page.wait_for_ready_state("complete", timeout=5)
                 html = await page.get_content()
             except Exception as e:
-                logger.warning(f"Error fetching page with zendriver: {str(e)}, trying trafilatura next")
+                logger.warning(
+                    f"Error fetching page with zendriver: {str(e)}, trying trafilatura next"
+                )
             finally:
                 # Ensure browser is closed even if an error occurs
                 if browser:
@@ -48,7 +52,7 @@ async def load_webpage(
                         await browser.stop()
                     except Exception:
                         pass  # Ignore errors during browser closing
-            
+
             # Second try: Use trafilatura's fetch_url if zendriver failed
             if not html:
                 try:
@@ -58,10 +62,12 @@ async def load_webpage(
                         logger.error(f"Failed to fetch {url} with trafilatura")
                 except Exception as e:
                     logger.error(f"Error fetching page with trafilatura: {str(e)}")
-            
+
             # If both methods failed, return error
             if not html:
-                logger.error(f"Failed to retrieve content from {url} using both zendriver and trafilatura")
+                logger.error(
+                    f"Failed to retrieve content from {url} using both zendriver and trafilatura"
+                )
                 return f"Error: Failed to retrieve page content from {url} using multiple methods"
 
             if raw:
@@ -182,3 +188,55 @@ async def load_image_file(url: str) -> Image:
     except Exception as e:
         logger.error(f"Error loading image: {str(e)}")
         raise ValueError(f"Error loading image: {str(e)}")
+
+
+async def load_content(
+    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
+) -> str | Image:
+    """
+    Universal content loader that handles different content types based on URL pattern.
+
+    Args:
+        url: The URL to fetch content from
+        limit: Maximum number of characters to return (for text content)
+        offset: Character offset to start from (for text content)
+        raw: If True, returns raw content instead of processed format
+
+    Returns:
+        Extracted content as string or Image object depending on content type
+
+    Raises:
+        ValueError: If image loading fails
+    """
+    # Check URL pattern to guess content type
+    url_lower = url.lower()
+
+    # Extract extension if present
+    path = url.split("?")[0].split("#")[0]  # Remove query params and fragments
+    _, ext = os.path.splitext(path)
+    ext = ext.lower()
+
+    if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"):
+        content_type = "image"
+    elif ext == ".pdf" or url_lower.endswith("/pdf") or "pdf" in url_lower:
+        content_type = "pdf"
+    else:
+        # Default to webpage
+        content_type = "webpage"
+
+    logger.info(f"Auto-detected content type '{content_type}' for URL: {url}")
+
+    # Load content based on detected type
+    try:
+        if content_type == "image":
+            return await load_image_file(url)
+        elif content_type == "pdf":
+            return await load_pdf_document(url, limit, offset, raw)
+        else:  # webpage
+            return await load_webpage(url, limit, offset, raw)
+    except ValueError as e:
+        # Re-raise ValueError from image loader
+        raise e
+    except Exception as e:
+        logger.error(f"Error in universal content loader: {str(e)}")
+        return f"Error loading content from {url}: {str(e)}"

@@ -1,10 +1,11 @@
 import logging
+from typing import Union
 from pydantic import Field
 
 from mcp.server.fastmcp import FastMCP, Image
 
 from .search import web_search
-from .loaders import load_webpage, load_pdf_document, load_image_file
+from .loaders import load_content
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +24,7 @@ def help() -> str:
 
     ## Usage
     1. Use `web_search` to find potentially relevant URLs based on your query.
-    2. Use `load_page` or `load_pdf` to fetch and extract URLs of interest.
-    3. Use `load_image` to fetch and display images from the web.
+    2. Use `fetch_url` to fetch and extract content from any URL - it auto-detects content type.
 
     ## Notes
     - Rely on unbiased and trusted sources to retrieve accurate results.
@@ -36,65 +36,34 @@ def help() -> str:
 @mcp.tool()
 async def search_web(
     query: str = Field(description="The search query to use."),
-    limit: int = Field(10, le=30, description="Max. number of results to return."),
-    offset: int = Field(0, ge=0, description="Result offset to start returning from."),
+    offset: int = Field(0, ge=0, description="To scroll through more results."),
 ) -> list[dict]:
     """
-    Execute a web search using the given search query.
+    Execute a web search using the given search query and returns 10 results.
     Tries to use Brave first, then Google, finally DuckDuckGo as fallbacks.
     Returns a list of the title, URL, and description of each result.
     """
-    return await web_search(query, limit, offset)
+    return await web_search(query, 10, offset)
 
 
 @mcp.tool()
-async def load_page(
-    url: str = Field(description="The remote URL to load/fetch content from."),
-    limit: int = Field(
-        10_000, gt=0, le=100_000, description="Max. number of characters to return."
-    ),
+async def fetch_url(
+    url: str = Field(description="The remote URL to load content from."),
     offset: int = Field(
-        0, ge=0, description="Character offset to start returning from."
+        0,
+        ge=0,
+        description="Character/content offset to start from (for text content).",
     ),
     raw: bool = Field(
-        False, description="Return raw HTML instead of cleaned Markdown."
+        False,
+        description="Return raw content instead cleaning it. Relevant for webpages and PDFs.",
     ),
-) -> str:
+) -> Union[str, Image]:
     """
-    Fetch the content from an URL and return it in cleaned Markdown format.
-    Use `offset` if you need to paginate/scroll the content.
-    Use `raw` to retrieve the original source code without trying to clean it.
+    Universal content loader that fetches and processes content from any URL.
+    Automatically detects content type (webpage, PDF, or image) based on URL.
     """
-    return await load_webpage(url, limit, offset, raw)
-
-
-@mcp.tool()
-async def load_pdf(
-    url: str = Field(description="The remote PDF file URL to fetch."),
-    limit: int = Field(
-        10_000, gt=0, le=100_000, description="Max. number of characters to return."
-    ),
-    offset: int = Field(0, ge=0, description="Starting index of the content"),
-    raw: bool = Field(
-        False, description="Return raw content instead of cleaned Markdown."
-    ),
-) -> str:
-    """
-    Fetch a PDF file from the internet and extract its content in markdown.
-    Use `offset` if you need to paginate/scroll the content.
-    Use `raw` to retrieve the original source code without trying to format it.
-    """
-    return await load_pdf_document(url, limit, offset, raw)
-
-
-@mcp.tool()
-async def load_image(
-    url: str = Field(description="The remote image file URL to fetch."),
-) -> Image:
-    """
-    Fetch an image from the internet and view it.
-    """
-    return await load_image_file(url)
+    return await load_content(url, 20_000, offset, raw)
 
 
 def main():
