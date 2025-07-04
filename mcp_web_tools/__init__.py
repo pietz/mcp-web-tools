@@ -1,8 +1,7 @@
 import logging
-from typing import Union
 from pydantic import Field
 
-from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.fastmcp import FastMCP
 
 from .search import web_search
 from .loaders import load_content
@@ -58,7 +57,7 @@ async def fetch_url(
         False,
         description="Return raw content instead cleaning it. Relevant for webpages and PDFs.",
     ),
-) -> Union[str, Image]:
+):
     """
     Universal content loader that fetches and processes content from any URL.
     Automatically detects content type (webpage, PDF, or image) based on URL.

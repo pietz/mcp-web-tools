@@ -187,7 +187,7 @@ async def load_image_file(url: str) -> Image:
 
 async def load_content(
     url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
-) -> str | Image:
+):
     """
     Universal content loader that handles different content types based on URL pattern.
 
