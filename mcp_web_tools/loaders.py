@@ -1,12 +1,11 @@
-import asyncio
+import os
 import io
 import logging
-import os
-import re
-from PIL import Image as PILImage
-import httpx
+import asyncio
 
+import httpx
 import pymupdf
+from PIL import Image as PILImage
 import zendriver as zd  # fetching
 import trafilatura  # web extraction
 import pymupdf4llm  # pdf extraction
@@ -35,33 +34,29 @@ async def load_webpage(
             html = None
             browser = None
 
-            # First try: Use zendriver
             try:
-                browser = await zd.start(headless=True, sandbox=False)
-                page = await browser.get(url)
-                await page.wait_for_ready_state("complete", timeout=5)
-                html = await page.get_content()
+                logger.info(f"Attempting to fetch {url} with trafilatura")
+                html = trafilatura.fetch_url(url)
             except Exception as e:
-                logger.warning(
-                    f"Error fetching page with zendriver: {str(e)}, trying trafilatura next"
-                )
-            finally:
-                # Ensure browser is closed even if an error occurs
-                if browser:
-                    try:
-                        await browser.stop()
-                    except Exception:
-                        pass  # Ignore errors during browser closing
+                logger.error(f"Error fetching page with trafilatura: {str(e)}")
 
-            # Second try: Use trafilatura's fetch_url if zendriver failed
             if not html:
                 try:
-                    logger.info(f"Attempting to fetch {url} with trafilatura")
-                    html = trafilatura.fetch_url(url)
-                    if not html:
-                        logger.error(f"Failed to fetch {url} with trafilatura")
+                    browser = await zd.start(headless=True, sandbox=False)
+                    page = await browser.get(url)
+                    await page.wait_for_ready_state("complete", timeout=5)
+                    html = await page.get_content()
                 except Exception as e:
-                    logger.error(f"Error fetching page with trafilatura: {str(e)}")
+                    logger.warning(
+                        f"Error fetching page with zendriver: {str(e)}, trying trafilatura next"
+                    )
+                finally:
+                    # Ensure browser is closed even if an error occurs
+                    if browser:
+                        try:
+                            await browser.stop()
+                        except Exception:
+                            pass  # Ignore errors during browser closing
 
             # If both methods failed, return error
             if not html:
@@ -176,8 +171,8 @@ async def load_image_file(url: str) -> Image:
                 raise ValueError(f"Error: Could not fetch image from {url}")
 
             img = PILImage.open(io.BytesIO(res.content))
-            if max(img.size) > 1024:
-                img.thumbnail((1024, 1024))
+            if max(img.size) > 1536:
+                img.thumbnail((1536, 1536))
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
             return Image(data=buffer.getvalue(), format="png")

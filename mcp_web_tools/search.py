@@ -8,7 +8,7 @@ import googlesearch
 logger = logging.getLogger(__name__)
 
 
-async def brave_search(query: str, limit: int = 10) -> list[dict] | None:
+async def brave_search(query: str, limit: int = 10) -> dict | None:
     """
     Search the web using the Brave Search API.
     Requires BRAVE_SEARCH_API_KEY environment variable.
@@ -31,14 +31,17 @@ async def brave_search(query: str, limit: int = 10) -> list[dict] | None:
                 raise ValueError("Unexpected response format from Brave Search API")
 
             results = data["web"]["results"]
-            return [
-                {
-                    "title": x["title"],
-                    "url": x["url"],
-                    "description": x["description"],
-                }
-                for x in results
-            ]
+            return {
+                "results": [
+                    {
+                        "title": x["title"],
+                        "url": x["url"],
+                        "description": x["description"],
+                    }
+                    for x in results
+                ],
+                "provider": "brave"
+            }
     except httpx.HTTPStatusError as e:
         logger.warning(
             f"Brave Search API returned status code {e.response.status_code}"
@@ -51,7 +54,7 @@ async def brave_search(query: str, limit: int = 10) -> list[dict] | None:
     return None
 
 
-def google_search(query: str, limit: int = 10) -> list[dict] | None:
+def google_search(query: str, limit: int = 10) -> dict | None:
     """
     Search the web using Google Search.
     """
@@ -61,17 +64,20 @@ def google_search(query: str, limit: int = 10) -> list[dict] | None:
         if not results:
             raise ValueError("No results returned from Google Search")
 
-        return [
-            {"title": r.title, "url": r.url, "description": r.description}
-            for r in results
-        ]
+        return {
+            "results": [
+                {"title": r.title, "url": r.url, "description": r.description}
+                for r in results
+            ],
+            "provider": "google"
+        }
     except Exception as e:
         logger.warning(f"Error using Google Search: {str(e)}")
 
     return None
 
 
-def duckduckgo_search(query: str, limit: int = 10) -> list[dict] | None:
+def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
     """
     Search the web using DuckDuckGo.
     """
@@ -81,21 +87,24 @@ def duckduckgo_search(query: str, limit: int = 10) -> list[dict] | None:
         if not results:
             raise ValueError("No results returned from DuckDuckGo")
 
-        return [
-            {"title": r["title"], "url": r["href"], "description": r["body"]}
-            for r in results
-        ]
+        return {
+            "results": [
+                {"title": r["title"], "url": r["href"], "description": r["body"]}
+                for r in results
+            ],
+            "provider": "duckduckgo"
+        }
     except Exception as e:
         logger.warning(f"Error using DuckDuckGo: {str(e)}")
 
     return None
 
 
-async def web_search(query: str, limit: int = 10, offset: int = 0) -> list[dict]:
+async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
     """
     Search the web using multiple providers, falling back if needed.
     Tries Brave Search API first (if API key available), then Google, finally DuckDuckGo.
-    Returns a list of search results with title, URL, and description.
+    Returns a dictionary with search results and the provider used.
     """
     # Try Brave Search first
     results = await brave_search(query, limit)
@@ -113,4 +122,4 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> list[dict]
         return results
 
     logger.error("All search methods failed.")
-    return []  # Return empty list if all search methods fail
+    return {"results": [], "provider": "none"}  # Return empty results if all search methods fail

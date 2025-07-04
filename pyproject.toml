@@ -1,6 +1,6 @@
 [project]
 name = "mcp-web-tools"
-version = "0.5.0"
+version = "0.5.1"
 description = "A powerful MCP server to equip LLMs with web access, search, and content extraction capabilities"
 readme = "README.md"
 authors = [
@@ -40,3 +40,10 @@ mcp-web-tools = "mcp_web_tools:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+]

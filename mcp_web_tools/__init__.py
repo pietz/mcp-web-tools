@@ -37,11 +37,11 @@ def help() -> str:
 async def search_web(
     query: str = Field(description="The search query to use."),
     offset: int = Field(0, ge=0, description="To scroll through more results."),
-) -> list[dict]:
+) -> dict:
     """
     Execute a web search using the given search query and returns 10 results.
     Tries to use Brave first, then Google, finally DuckDuckGo as fallbacks.
-    Returns a list of the title, URL, and description of each result.
+    Returns a dictionary with 'results' (list of search results) and 'provider' (search engine used).
     """
     return await web_search(query, 10, offset)
 
