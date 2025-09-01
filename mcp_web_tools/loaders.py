@@ -30,13 +30,16 @@ async def load_webpage(
     """
     try:
         async with asyncio.timeout(10):
-            # Initialize html and browser to None
+            # Initialize html, provider and browser to None
             html = None
+            provider = None  # Will be set to 'trafilatura' or 'zendriver'
             browser = None
 
             try:
                 logger.info(f"Attempting to fetch {url} with trafilatura")
                 html = trafilatura.fetch_url(url)
+                if html:
+                    provider = "trafilatura"
             except Exception as e:
                 logger.error(f"Error fetching page with trafilatura: {str(e)}")
 
@@ -46,6 +49,8 @@ async def load_webpage(
                     page = await browser.get(url)
                     await page.wait_for_ready_state("complete", timeout=5)
                     html = await page.get_content()
+                    if html:
+                        provider = "zendriver"
                 except Exception as e:
                     logger.warning(
                         f"Error fetching page with zendriver: {str(e)}, trying trafilatura next"
@@ -66,9 +71,10 @@ async def load_webpage(
                 return f"Error: Failed to retrieve page content from {url} using multiple methods"
 
             if raw:
+                note = f"_Fetched via: {provider}_\n\n" if provider else ""
                 res = html[offset : offset + limit]
                 res += f"\n\n---Showing {offset} to {min(offset + limit, len(html))} out of {len(html)} characters.---"
-                return res
+                return note + res
 
             try:
                 content = trafilatura.extract(
@@ -84,11 +90,16 @@ async def load_webpage(
             if not content:
                 logger.warning(f"Failed to extract content from {url}")
                 # Fallback to raw HTML with a warning
-                return f"Warning: Could not extract readable content from {url}. Showing raw HTML instead.\n\n{html[offset : offset + limit]}"
+                note = f"_Fetched via: {provider}_\n\n" if provider else ""
+                return (
+                    f"{note}Warning: Could not extract readable content from {url}. "
+                    f"Showing raw HTML instead.\n\n{html[offset : offset + limit]}"
+                )
 
+            note = f"_Fetched via: {provider}_\n\n" if provider else ""
             res = content[offset : offset + limit]
             res += f"\n\n---Showing {offset} to {min(offset + limit, len(content))} out of {len(content)} characters.---"
-            return res
+            return note + res
 
     except asyncio.TimeoutError:
         logger.error(f"Request timed out after 10 seconds for URL: {url}")
