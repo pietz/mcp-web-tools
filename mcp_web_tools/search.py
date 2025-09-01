@@ -1,9 +1,9 @@
 import os
 import logging
-import httpx
 
 from duckduckgo_search import DDGS
 import googlesearch
+from brave_search_python_client import BraveSearch, WebSearchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -16,41 +16,22 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
     if not os.getenv("BRAVE_SEARCH_API_KEY"):
         return None
 
+    logger.info("Using Brave Search (SDK)...")
     try:
-        logger.info("Using Brave Search...")
-
-        async with httpx.AsyncClient() as client:
-            url = "https://api.search.brave.com/res/v1/web/search"
-            headers = {"X-Subscription-Token": os.getenv("BRAVE_SEARCH_API_KEY")}
-            params = {"q": query, "count": limit}
-            r = await client.get(url, headers=headers, params=params, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-
-            if "web" not in data or "results" not in data["web"]:
-                raise ValueError("Unexpected response format from Brave Search API")
-
-            results = data["web"]["results"]
-            return {
-                "results": [
-                    {
-                        "title": x["title"],
-                        "url": x["url"],
-                        "description": x["description"],
-                    }
-                    for x in results
-                ],
-                "provider": "brave"
-            }
-    except httpx.HTTPStatusError as e:
-        logger.warning(
-            f"Brave Search API returned status code {e.response.status_code}"
-        )
-    except httpx.TimeoutException:
-        logger.warning("Brave Search API request timed out")
+        client = BraveSearch()
+        req = WebSearchRequest(q=query, count=limit)
+        res = await client.web(req, retries=3, wait_time=1)
+        if not res.web or not res.web.results:
+            return None
+        return {
+            "results": [
+                {"title": r.title, "url": r.url, "description": r.description}
+                for r in res.web.results
+            ],
+            "provider": "brave",
+        }
     except Exception as e:
-        logger.warning(f"Error using Brave Search: {str(e)}")
-
+        logger.warning(f"Error using Brave SDK: {e}")
     return None
 
 
@@ -63,17 +44,15 @@ def google_search(query: str, limit: int = 10) -> dict | None:
         results = googlesearch.search(query, num_results=limit, advanced=True)
         if not results:
             raise ValueError("No results returned from Google Search")
-
         return {
             "results": [
                 {"title": r.title, "url": r.url, "description": r.description}
                 for r in results
             ],
-            "provider": "google"
+            "provider": "google",
         }
     except Exception as e:
         logger.warning(f"Error using Google Search: {str(e)}")
-
     return None
 
 
@@ -86,17 +65,15 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
         results = list(DDGS().text(query, max_results=limit))
         if not results:
             raise ValueError("No results returned from DuckDuckGo")
-
         return {
             "results": [
                 {"title": r["title"], "url": r["href"], "description": r["body"]}
                 for r in results
             ],
-            "provider": "duckduckgo"
+            "provider": "duckduckgo",
         }
     except Exception as e:
         logger.warning(f"Error using DuckDuckGo: {str(e)}")
-
     return None
 
 
@@ -122,4 +99,7 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
         return results
 
     logger.error("All search methods failed.")
-    return {"results": [], "provider": "none"}  # Return empty results if all search methods fail
+    return {
+        "results": [],
+        "provider": "none",
+    }
