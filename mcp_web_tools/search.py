@@ -24,11 +24,11 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
         if not res.web or not res.web.results:
             return None
         return {
+            "provider": "brave",
             "results": [
                 {"title": r.title, "url": r.url, "description": r.description}
                 for r in res.web.results
             ],
-            "provider": "brave",
         }
     except Exception as e:
         logger.warning(f"Error using Brave SDK: {e}")
@@ -45,11 +45,11 @@ def google_search(query: str, limit: int = 10) -> dict | None:
         if not results:
             raise ValueError("No results returned from Google Search")
         return {
+            "provider": "google",
             "results": [
                 {"title": r.title, "url": r.url, "description": r.description}
                 for r in results
             ],
-            "provider": "google",
         }
     except Exception as e:
         logger.warning(f"Error using Google Search: {str(e)}")
@@ -66,11 +66,11 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
         if not results:
             raise ValueError("No results returned from DuckDuckGo")
         return {
+            "provider": "duckduckgo",
             "results": [
                 {"title": r["title"], "url": r["href"], "description": r["body"]}
                 for r in results
             ],
-            "provider": "duckduckgo",
         }
     except Exception as e:
         logger.warning(f"Error using DuckDuckGo: {str(e)}")
@@ -100,6 +100,6 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
 
     logger.error("All search methods failed.")
     return {
-        "results": [],
         "provider": "none",
+        "results": [],
     }

@@ -1,6 +1,6 @@
 [project]
 name = "mcp-web-tools"
-version = "0.7.0"
+version = "0.7.1"
 description = "A powerful MCP server to equip LLMs with web access, search, and content extraction capabilities"
 readme = "README.md"
 authors = [
