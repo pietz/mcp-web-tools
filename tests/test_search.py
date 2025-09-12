@@ -1,7 +1,6 @@
 import pytest
 import os
 from unittest.mock import patch, AsyncMock, Mock
-import httpx
 
 from mcp_web_tools.search import brave_search, google_search, duckduckgo_search, web_search
 

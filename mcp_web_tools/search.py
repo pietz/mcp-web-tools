@@ -1,10 +1,12 @@
 import os
+import logging
 
 from duckduckgo_search import DDGS
 import googlesearch
-# Import submodules directly to avoid __init__.py side effects (boot() config)
-from brave_search_python_client.client import BraveSearch
-from brave_search_python_client.requests import WebSearchRequest
+from brave_search_python_client import BraveSearch, WebSearchRequest
+
+
+logger = logging.getLogger(__name__)
 
 
 async def brave_search(query: str, limit: int = 10) -> dict | None:
@@ -12,11 +14,9 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
     Search the web using the Brave Search API.
     Requires BRAVE_SEARCH_API_KEY environment variable.
     """
-    if not os.getenv("BRAVE_SEARCH_API_KEY"):
-        return None
-
     try:
-        client = BraveSearch()
+        api_key = os.environ["BRAVE_SEARCH_API_KEY"]
+        client = BraveSearch(api_key=api_key)
         req = WebSearchRequest(q=query, count=limit)
         res = await client.web(req, retries=3, wait_time=1)
         if not res.web or not res.web.results:
@@ -29,8 +29,8 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        # Swallow errors to allow fallback to other providers
-        _ = e
+        # Log and allow fallback to other providers
+        logger.warning(f"Brave search failed: {str(e)}")
     return None
 
 
@@ -40,14 +40,14 @@ def google_search(query: str, limit: int = 10) -> dict | None:
     """
     try:
         results = googlesearch.search(query, num_results=limit, advanced=True)
-        
+
         # Convert results to list to properly handle generators/iterators
         results_list = list(results) if results else []
-        
+
         # Return None if no results to trigger fallback
         if not results_list:
             return None
-            
+
         return {
             "provider": "google",
             "results": [
@@ -56,8 +56,8 @@ def google_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        # Swallow errors to allow fallback to other providers
-        _ = e
+        # Log and allow fallback to other providers
+        logger.warning(f"Google search failed: {str(e)}")
     return None
 
 
@@ -77,8 +77,8 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        # Swallow errors to allow fallback to other providers
-        _ = e
+        # Log and allow fallback to other providers
+        logger.warning(f"DuckDuckGo search failed: {str(e)}")
     return None
 
 
