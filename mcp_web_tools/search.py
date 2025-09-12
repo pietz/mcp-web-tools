@@ -40,13 +40,19 @@ def google_search(query: str, limit: int = 10) -> dict | None:
     """
     try:
         results = googlesearch.search(query, num_results=limit, advanced=True)
-        if not results:
-            raise ValueError("No results returned from Google Search")
+        
+        # Convert results to list to properly handle generators/iterators
+        results_list = list(results) if results else []
+        
+        # Return None if no results to trigger fallback
+        if not results_list:
+            return None
+            
         return {
             "provider": "google",
             "results": [
                 {"title": r.title, "url": r.url, "description": r.description}
-                for r in results
+                for r in results_list
             ],
         }
     except Exception as e:

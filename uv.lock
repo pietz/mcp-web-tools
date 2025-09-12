@@ -441,7 +441,7 @@ wheels = [
 
 [[package]]
 name = "mcp-web-tools"
-version = "0.7.3"
+version = "0.7.4"
 source = { editable = "." }
 dependencies = [
     { name = "brave-search-python-client" },
@@ -464,7 +464,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "brave-search-python-client", specifier = ">=0.4.20" },
+    { name = "brave-search-python-client", specifier = ">=0.4.27" },
     { name = "duckduckgo-search", specifier = ">=8.1.1" },
     { name = "googlesearch-python", specifier = ">=1.3.0" },
     { name = "mcp", specifier = ">=1.13.1" },

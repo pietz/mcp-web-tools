@@ -1,6 +1,6 @@
 [project]
 name = "mcp-web-tools"
-version = "0.7.3"
+version = "0.7.4"
 description = "A powerful MCP server to equip LLMs with web access, search, and content extraction capabilities"
 readme = "README.md"
 authors = [
@@ -28,7 +28,7 @@ dependencies = [
     "pymupdf4llm>=0.0.27",
     "trafilatura>=2.0.0",
     "zendriver>=0.14.0",
-    "brave-search-python-client>=0.4.20",
+    "brave-search-python-client>=0.4.27",
 ]
 
 [project.urls]
