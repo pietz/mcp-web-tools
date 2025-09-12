@@ -2,7 +2,9 @@ import os
 
 from duckduckgo_search import DDGS
 import googlesearch
-from brave_search_python_client import BraveSearch, WebSearchRequest
+# Import submodules directly to avoid __init__.py side effects (boot() config)
+from brave_search_python_client.client import BraveSearch
+from brave_search_python_client.requests import WebSearchRequest
 
 
 async def brave_search(query: str, limit: int = 10) -> dict | None:

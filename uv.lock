@@ -441,7 +441,7 @@ wheels = [
 
 [[package]]
 name = "mcp-web-tools"
-version = "0.6.0"
+version = "0.7.3"
 source = { editable = "." }
 dependencies = [
     { name = "brave-search-python-client" },
