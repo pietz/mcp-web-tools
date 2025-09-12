@@ -1,11 +1,8 @@
 import os
-import logging
 
 from duckduckgo_search import DDGS
 import googlesearch
 from brave_search_python_client import BraveSearch, WebSearchRequest
-
-logger = logging.getLogger(__name__)
 
 
 async def brave_search(query: str, limit: int = 10) -> dict | None:
@@ -16,7 +13,6 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
     if not os.getenv("BRAVE_SEARCH_API_KEY"):
         return None
 
-    logger.info("Using Brave Search (SDK)...")
     try:
         client = BraveSearch()
         req = WebSearchRequest(q=query, count=limit)
@@ -31,7 +27,8 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        logger.warning(f"Error using Brave SDK: {e}")
+        # Swallow errors to allow fallback to other providers
+        _ = e
     return None
 
 
@@ -40,7 +37,6 @@ def google_search(query: str, limit: int = 10) -> dict | None:
     Search the web using Google Search.
     """
     try:
-        logger.info("Using Google Search...")
         results = googlesearch.search(query, num_results=limit, advanced=True)
         if not results:
             raise ValueError("No results returned from Google Search")
@@ -52,7 +48,8 @@ def google_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        logger.warning(f"Error using Google Search: {str(e)}")
+        # Swallow errors to allow fallback to other providers
+        _ = e
     return None
 
 
@@ -61,7 +58,6 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
     Search the web using DuckDuckGo.
     """
     try:
-        logger.info("Using DuckDuckGo Search...")
         results = list(DDGS().text(query, max_results=limit))
         if not results:
             raise ValueError("No results returned from DuckDuckGo")
@@ -73,7 +69,8 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
             ],
         }
     except Exception as e:
-        logger.warning(f"Error using DuckDuckGo: {str(e)}")
+        # Swallow errors to allow fallback to other providers
+        _ = e
     return None
 
 
@@ -98,7 +95,6 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
     if results:
         return results
 
-    logger.error("All search methods failed.")
     return {
         "provider": "none",
         "results": [],

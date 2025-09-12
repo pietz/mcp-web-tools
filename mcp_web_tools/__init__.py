@@ -1,14 +1,9 @@
-import logging
 from pydantic import Field
 
 from mcp.server.fastmcp import FastMCP
 
 from .search import web_search
 from .loaders import load_content
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Create the MCP server
 mcp = FastMCP("Web Tools", log_level="INFO")
