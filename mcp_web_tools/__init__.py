@@ -1,6 +1,23 @@
+import os
+import sys
+import logging
+
 from pydantic import Field
 
 from mcp.server.fastmcp import FastMCP
+
+# Ensure all logs go to stderr to keep stdout JSON-only for MCP
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    stream=sys.stderr,
+    format="%(levelname)s %(name)s: %(message)s",
+)
+
+# Prefer no persistent logs for Brave client; route to null device
+os.environ.setdefault(
+    "BRAVE_SEARCH_PYTHON_CLIENT_LOG_FILE_NAME",
+    os.devnull,
+)
 
 from .search import web_search
 from .loaders import load_content
@@ -61,8 +78,7 @@ async def fetch_url(
 
 
 def main():
-    """Entry point for the package when installed via pip."""
-    mcp.run()
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
