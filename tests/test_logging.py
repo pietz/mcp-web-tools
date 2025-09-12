@@ -11,16 +11,24 @@ class TestProviderLogging:
     @pytest.mark.asyncio
     async def test_brave_search_logs_warning_on_failure(self, caplog):
         with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test"}):
-            with patch("mcp_web_tools.search.BraveSearch") as mock_bs:
-                instance = mock_bs.return_value
-                instance.web = AsyncMock(side_effect=Exception("boom"))
+            # Simulate a generic failure in the HTTP call to trigger warning
+            class MockClient:
+                async def __aenter__(self):
+                    return self
 
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                async def get(self, *args, **kwargs):
+                    raise Exception("boom")
+
+            with patch("mcp_web_tools.search.httpx.AsyncClient", return_value=MockClient()):
                 caplog.set_level(logging.WARNING, logger=search_mod.__name__)
                 res = await search_mod.brave_search("q")
 
-                assert res is None
-                messages = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
-                assert any("Brave search failed" in m for m in messages)
+            assert res is None
+            messages = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
+            assert any("Error using Brave Search" in m for m in messages)
 
     def test_google_search_logs_warning_on_failure(self, caplog):
         with patch("googlesearch.search") as mock_search:
@@ -43,4 +51,3 @@ class TestProviderLogging:
             assert res is None
             messages = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
             assert any("DuckDuckGo search failed" in m for m in messages)
-

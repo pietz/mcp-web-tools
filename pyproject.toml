@@ -22,13 +22,13 @@ keywords = ["mcp", "llm", "web", "search", "extraction", "pdf"]
 dependencies = [
     "duckduckgo-search>=8.1.1",
     "googlesearch-python>=1.3.0",
+    "httpx>=0.28.1",
     "mcp>=1.13.1",
     "pillow>=11.2.1",
     "psutil>=7.0.0",
     "pymupdf4llm>=0.0.27",
     "trafilatura>=2.0.0",
     "zendriver>=0.14.0",
-    "brave-search-python-client>=0.4.27",
 ]
 
 [project.urls]
@@ -44,7 +44,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
 ]

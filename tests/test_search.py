@@ -1,6 +1,8 @@
-import pytest
 import os
 from unittest.mock import patch, AsyncMock, Mock
+
+import httpx
+import pytest
 
 from mcp_web_tools.search import brave_search, google_search, duckduckgo_search, web_search
 
@@ -15,33 +17,71 @@ class TestBraveSearch:
     @pytest.mark.asyncio
     async def test_brave_search_success(self):
         with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test_key"}):
-            from types import SimpleNamespace
-            with patch("mcp_web_tools.search.BraveSearch") as mock_bs:
-                instance = mock_bs.return_value
-                result_obj = SimpleNamespace(
-                    title="Test Title", url="https://test.com", description="Test Description"
-                )
-                mock_resp = SimpleNamespace(web=SimpleNamespace(results=[result_obj]))
-                instance.web = AsyncMock(return_value=mock_resp)
+            # Mock httpx AsyncClient context manager and response
+            class MockResponse:
+                def raise_for_status(self):
+                    return None
 
+                def json(self):
+                    return {
+                        "web": {
+                            "results": [
+                                {
+                                    "title": "Test Title",
+                                    "url": "https://test.com",
+                                    "description": "Test Description",
+                                }
+                            ]
+                        }
+                    }
+
+            class MockClient:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                async def get(self, *args, **kwargs):
+                    return MockResponse()
+
+            with patch("mcp_web_tools.search.httpx.AsyncClient", return_value=MockClient()):
                 result = await brave_search("test query", limit=1)
 
-                assert result is not None
-                assert result["provider"] == "brave"
-                assert len(result["results"]) == 1
-                assert result["results"][0]["title"] == "Test Title"
-                assert result["results"][0]["url"] == "https://test.com"
-                assert result["results"][0]["description"] == "Test Description"
+            assert result is not None
+            assert result["provider"] == "brave"
+            assert len(result["results"]) == 1
+            assert result["results"][0]["title"] == "Test Title"
+            assert result["results"][0]["url"] == "https://test.com"
+            assert result["results"][0]["description"] == "Test Description"
 
     @pytest.mark.asyncio
     async def test_brave_search_http_error(self):
         with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test_key"}):
-            with patch("mcp_web_tools.search.BraveSearch") as mock_bs:
-                instance = mock_bs.return_value
-                instance.web = AsyncMock(side_effect=Exception("API error"))
+            req = httpx.Request("GET", "https://api.search.brave.com/res/v1/web/search")
+            resp = httpx.Response(500, request=req)
 
+            class MockResponse:
+                def raise_for_status(self):
+                    raise httpx.HTTPStatusError("error", request=req, response=resp)
+
+                def json(self):
+                    return {}
+
+            class MockClient:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                async def get(self, *args, **kwargs):
+                    return MockResponse()
+
+            with patch("mcp_web_tools.search.httpx.AsyncClient", return_value=MockClient()):
                 result = await brave_search("test query")
-                assert result is None
+
+            assert result is None
 
 
 class TestGoogleSearch:

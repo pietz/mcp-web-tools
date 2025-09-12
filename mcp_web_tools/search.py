@@ -3,7 +3,7 @@ import logging
 
 from duckduckgo_search import DDGS
 import googlesearch
-from brave_search_python_client import BraveSearch, WebSearchRequest
+import httpx
 
 
 logger = logging.getLogger(__name__)
@@ -11,26 +11,42 @@ logger = logging.getLogger(__name__)
 
 async def brave_search(query: str, limit: int = 10) -> dict | None:
     """
-    Search the web using the Brave Search API.
-    Requires BRAVE_SEARCH_API_KEY environment variable.
+    Search the web using the Brave Search API via a naive HTTPX call.
+    Returns None if no API key is configured or on any failure.
     """
+    api_key = os.getenv("BRAVE_SEARCH_API_KEY")
+    if not api_key:
+        return None
+
+    url = "https://api.search.brave.com/res/v1/web/search"
+    headers = {"X-Subscription-Token": api_key}
+    params = {"q": query, "count": limit}
+
     try:
-        api_key = os.environ["BRAVE_SEARCH_API_KEY"]
-        client = BraveSearch(api_key=api_key)
-        req = WebSearchRequest(q=query, count=limit)
-        res = await client.web(req, retries=3, wait_time=1)
-        if not res.web or not res.web.results:
-            return None
-        return {
-            "provider": "brave",
-            "results": [
-                {"title": r.title, "url": r.url, "description": r.description}
-                for r in res.web.results
-            ],
-        }
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, headers=headers, params=params, timeout=10)
+            r.raise_for_status()
+            results = r.json()["web"]["results"]
+            return {
+                "provider": "brave",
+                "results": [
+                    {
+                        "title": x["title"],
+                        "url": x["url"],
+                        "description": x.get("description", ""),
+                    }
+                    for x in results
+                ],
+            }
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            f"Brave Search API returned status code {e.response.status_code}"
+        )
+    except httpx.TimeoutException:
+        logger.warning("Brave Search API request timed out")
     except Exception as e:
-        # Log and allow fallback to other providers
-        logger.warning(f"Brave search failed: {str(e)}")
+        logger.warning(f"Error using Brave Search: {str(e)}")
+
     return None
 
 
@@ -102,8 +118,6 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
     results = duckduckgo_search(query, limit)
     if results:
         return results
-
-    return {
-        "provider": "none",
-        "results": [],
-    }
+    
+    logging.error("All search providers failed.")
+    return {"error": "All search providers failed."}
