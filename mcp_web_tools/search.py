@@ -118,6 +118,6 @@ async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
     results = duckduckgo_search(query, limit)
     if results:
         return results
-    
+
     logging.error("All search providers failed.")
-    return {"error": "All search providers failed."}
+    return {"results": [], "provider": "none"}
