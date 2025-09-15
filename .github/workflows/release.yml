@@ -1,0 +1,76 @@
+name: CI, Release, and Publish
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    name: Test (uv)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync deps
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -q
+
+  release_and_publish:
+    name: Release from pyproject and Publish (uv)
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Detect version change
+        id: version
+        run: python scripts/release.py detect
+
+      - name: Set up uv
+        if: steps.version.outputs.release_needed == 'true'
+        uses: astral-sh/setup-uv@v3
+
+      - name: Build package (uv)
+        if: steps.version.outputs.release_needed == 'true'
+        run: python scripts/release.py build
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.release_needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/*
+
+      - name: Publish to PyPI (uv)
+        if: steps.version.outputs.release_needed == 'true'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: PYPI_TOKEN="$UV_PUBLISH_TOKEN" python scripts/release.py publish
