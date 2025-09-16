@@ -1,10 +1,15 @@
 import asyncio
+import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from mcp_web_tools.loaders import load_content, load_webpage
+from mcp_web_tools.loaders import (
+    capture_webpage_screenshot,
+    load_content,
+    load_webpage,
+)
 
 
 @pytest.mark.asyncio
@@ -182,3 +187,51 @@ async def test_load_content_wraps_other_exceptions():
     mock_webpage.assert_awaited_once_with("https://example.com/article", 10_000, 0, False)
     mock_image.assert_not_called()
     mock_pdf.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_capture_webpage_screenshot_returns_image():
+    screenshot_bytes = b"fakepng"
+    screenshot_b64 = base64.b64encode(screenshot_bytes).decode()
+
+    tab = SimpleNamespace(
+        wait_for_ready_state=AsyncMock(return_value=None),
+        screenshot_b64=AsyncMock(return_value=screenshot_b64),
+    )
+    browser = SimpleNamespace(
+        get=AsyncMock(return_value=tab),
+        stop=AsyncMock(return_value=None),
+    )
+
+    with patch("mcp_web_tools.loaders.zd.start", new_callable=AsyncMock) as mock_start:
+        mock_start.return_value = browser
+        result = await capture_webpage_screenshot(
+            "https://example.com", full_page=False
+        )
+
+    assert result.data == screenshot_bytes
+    assert result._format == "png"
+    browser.get.assert_awaited_once_with("https://example.com")
+    tab.wait_for_ready_state.assert_awaited_once_with("complete", timeout=10)
+    tab.screenshot_b64.assert_awaited_once_with(full_page=False)
+    browser.stop.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_capture_webpage_screenshot_raises_when_no_data():
+    tab = SimpleNamespace(
+        wait_for_ready_state=AsyncMock(return_value=None),
+        screenshot_b64=AsyncMock(return_value=""),
+    )
+    browser = SimpleNamespace(
+        get=AsyncMock(return_value=tab),
+        stop=AsyncMock(return_value=None),
+    )
+
+    with patch("mcp_web_tools.loaders.zd.start", new_callable=AsyncMock) as mock_start:
+        mock_start.return_value = browser
+        with pytest.raises(ValueError, match="No screenshot data returned"):
+            await capture_webpage_screenshot("https://example.com/missing")
+
+    browser.stop.assert_awaited_once_with()
+    tab.screenshot_b64.assert_awaited_once_with(full_page=False)
