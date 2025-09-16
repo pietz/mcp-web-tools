@@ -65,7 +65,16 @@ async def view_website(
         ),
     ] = False,
 ) -> Image:
-    """Render the URL with Zendriver and return a PNG screenshot of the page (full page optional)."""
+    """Capture a rendered screenshot of a webpage using Zendriver.
+
+    Args:
+        url: The HTTP(S) URL to navigate to before taking the screenshot.
+        full_page: When ``True`` capture the full scroll height; defaults to the
+            currently visible viewport when ``False``.
+
+    Returns:
+        A PNG ``Image`` payload that can be streamed back to the MCP client.
+    """
 
     return await capture_webpage_screenshot(url, full_page=full_page)
 
