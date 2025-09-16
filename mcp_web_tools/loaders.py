@@ -1,5 +1,6 @@
 import os
 import io
+import base64
 import logging
 import asyncio
 
@@ -107,6 +108,54 @@ async def load_webpage(
     except Exception as e:
         logger.error(f"Error loading page: {str(e)}")
         return f"Error loading page: {str(e)}"
+
+
+async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Image:
+    """Render a webpage in a headless browser and return a PNG screenshot.
+
+    Args:
+        url: The URL of the page to capture.
+        full_page: When True capture the entire scrollable page; defaults to the visible viewport only.
+
+    Returns:
+        An :class:`~mcp.server.fastmcp.Image` containing PNG image bytes.
+
+    Raises:
+        ValueError: If the screenshot cannot be captured.
+    """
+
+    browser = None
+    try:
+        async with asyncio.timeout(10):
+            browser = await zd.start(headless=True, sandbox=False)
+            tab = await browser.get(url)
+            await tab.wait_for_ready_state("complete", timeout=5)
+            screenshot_b64 = await tab.screenshot_b64(full_page=full_page)
+
+            if not screenshot_b64:
+                raise RuntimeError("No screenshot data returned from zendriver")
+
+            try:
+                screenshot_bytes = base64.b64decode(screenshot_b64)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise RuntimeError(f"Invalid screenshot data: {exc}") from exc
+
+            return Image(data=screenshot_bytes, format="png")
+
+    except asyncio.TimeoutError:
+        logger.error(f"Screenshot request timed out after 10 seconds for URL: {url}")
+        raise ValueError(
+            f"Error: Screenshot request timed out after 10 seconds for URL: {url}"
+        )
+    except Exception as e:
+        logger.error(f"Error capturing screenshot for {url}: {str(e)}")
+        raise ValueError(f"Error capturing screenshot for {url}: {str(e)}") from e
+    finally:
+        if browser:
+            try:
+                await browser.stop()
+            except Exception:
+                pass
 
 
 async def load_pdf_document(
