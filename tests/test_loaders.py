@@ -212,7 +212,7 @@ async def test_capture_webpage_screenshot_returns_image():
     assert result.data == screenshot_bytes
     assert result._format == "png"
     browser.get.assert_awaited_once_with("https://example.com")
-    tab.wait_for_ready_state.assert_awaited_once_with("complete", timeout=10)
+    tab.wait_for_ready_state.assert_awaited_once_with("complete", timeout=5)
     tab.screenshot_b64.assert_awaited_once_with(full_page=False)
     browser.stop.assert_awaited_once_with()
 

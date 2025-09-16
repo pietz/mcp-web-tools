@@ -126,10 +126,10 @@ async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Im
 
     browser = None
     try:
-        async with asyncio.timeout(20):
+        async with asyncio.timeout(10):
             browser = await zd.start(headless=True, sandbox=False)
             tab = await browser.get(url)
-            await tab.wait_for_ready_state("complete", timeout=10)
+            await tab.wait_for_ready_state("complete", timeout=5)
             screenshot_b64 = await tab.screenshot_b64(full_page=full_page)
 
             if not screenshot_b64:
@@ -143,9 +143,9 @@ async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Im
             return Image(data=screenshot_bytes, format="png")
 
     except asyncio.TimeoutError:
-        logger.error(f"Screenshot request timed out after 20 seconds for URL: {url}")
+        logger.error(f"Screenshot request timed out after 10 seconds for URL: {url}")
         raise ValueError(
-            f"Error: Screenshot request timed out after 20 seconds for URL: {url}"
+            f"Error: Screenshot request timed out after 10 seconds for URL: {url}"
         )
     except Exception as e:
         logger.error(f"Error capturing screenshot for {url}: {str(e)}")
