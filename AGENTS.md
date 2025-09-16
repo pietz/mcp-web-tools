@@ -32,6 +32,7 @@
 - Commits: imperative, concise, scoped (e.g., "search: improve DDG fallback").
 - Reference issues (`Fixes #123`) when applicable.
 - PRs include a clear rationale, behavior changes, test updates, and any config/env notes.
+- When you ship any new feature or bug fix, bump the `version` in `pyproject.toml` using semantic versioning that matches the scope of the change.
 
 ## Security & Configuration Tips
 - MCP stdio compliance: stdout must contain only newline‑delimited JSON‑RPC; write logs to stderr only. Avoid `print()`.
