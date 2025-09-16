@@ -1,5 +1,6 @@
+import logging
 import os
-from unittest.mock import patch, AsyncMock, Mock
+from unittest.mock import patch, AsyncMock, Mock, call
 
 import httpx
 import pytest
@@ -82,6 +83,93 @@ class TestBraveSearch:
                 result = await brave_search("test query")
 
             assert result is None
+
+    @pytest.mark.asyncio
+    async def test_brave_search_retries_on_rate_limit(self, caplog):
+        with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test_key"}):
+            req = httpx.Request("GET", "https://api.search.brave.com/res/v1/web/search")
+            resp_429 = httpx.Response(429, request=req)
+
+            class RateLimitedResponse:
+                def raise_for_status(self):
+                    raise httpx.HTTPStatusError("429", request=req, response=resp_429)
+
+                def json(self):
+                    return {}
+
+            success_payload = {
+                "web": {
+                    "results": [
+                        {
+                            "title": "Recovered",
+                            "url": "https://example.com",
+                            "description": "after retry",
+                        }
+                    ]
+                }
+            }
+
+            class SuccessResponse:
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return success_payload
+
+            class MockClient:
+                def __init__(self):
+                    self.calls = 0
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                async def get(self, *args, **kwargs):
+                    self.calls += 1
+                    if self.calls == 1:
+                        return RateLimitedResponse()
+                    return SuccessResponse()
+
+            client_instance = MockClient()
+
+            with (
+                patch("mcp_web_tools.search.httpx.AsyncClient", return_value=client_instance),
+                patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+            ):
+                caplog.set_level(logging.INFO, logger="mcp_web_tools.search")
+                result = await brave_search("test query", limit=2)
+
+            assert result is not None
+            assert result["provider"] == "brave"
+            assert len(result["results"]) == 1
+            assert client_instance.calls == 2
+            mock_sleep.assert_awaited_once()
+            assert mock_sleep.await_args_list == [call(1)]
+            messages = [rec.getMessage() for rec in caplog.records]
+            assert any("retrying in 1s" in message for message in messages)
+
+    @pytest.mark.asyncio
+    async def test_brave_search_logs_timeout_warning(self, caplog):
+        with patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test_key"}):
+            class MockClient:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                async def get(self, *args, **kwargs):
+                    raise httpx.TimeoutException("timeout")
+
+            with patch("mcp_web_tools.search.httpx.AsyncClient", return_value=MockClient()):
+                caplog.set_level(logging.WARNING, logger="mcp_web_tools.search")
+                result = await brave_search("test query")
+
+            assert result is None
+            messages = [rec.getMessage() for rec in caplog.records]
+            assert any("Brave Search API request timed out" in message for message in messages)
 
 
 class TestGoogleSearch:
