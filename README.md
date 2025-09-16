@@ -11,6 +11,7 @@ I created this package out of the frustration that most MCP servers enabling web
 - [x] Extracting content in nicely formatted Markdown
 - [x] Support for extracting content from PDFs
 - [x] Support for loading and displaying images
+- [x] Capture rendered webpage screenshots for visual context
 - [x] Usage options for advanced cases like loading raw HTML
 
 ## Installation
@@ -48,6 +49,10 @@ The fetching of web content is based on [Zendriver](https://github.com/stephanle
 ### Extracting
 
 For web extraction, we use [Trafilatura](https://trafilatura.readthedocs.io/en/latest/index.html) which consistently outperforms other alternatives for extracting content from HTML pages. For PDFs, we use [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/) which similarly extracts content in an easy-to-read format for LLMs, with advanced layout support.
+
+### Screenshots
+
+Rendered page previews are powered by [Zendriver](https://github.com/stephanlensky/zendriver). The `view_website` tool navigates to a URL in a headless Chromium session and returns the resulting page as a PNG screenshot. By default only the current viewport is captured, but callers can request a full-page image by setting the `full_page` argument to `true`.
 
 ## Contributing
 

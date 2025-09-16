@@ -2,7 +2,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from mcp_web_tools.__init__ import fetch_url, search_web
+from mcp.server.fastmcp import Image
+
+from mcp_web_tools.__init__ import fetch_url, search_web, view_website
 
 
 @pytest.mark.asyncio
@@ -37,3 +39,31 @@ async def test_fetch_url_tool_uses_default_arguments(monkeypatch):
 
     assert result == "default"
     mock_loader.assert_awaited_once_with("https://example.com/other", 20_000, 0, False)
+
+
+@pytest.mark.asyncio
+async def test_view_website_delegates_to_screenshot_loader(monkeypatch):
+    screenshot = Image(data=b"img", format="png")
+    mock_capture = AsyncMock(return_value=screenshot)
+    monkeypatch.setattr(
+        "mcp_web_tools.__init__.capture_webpage_screenshot", mock_capture
+    )
+
+    result = await view_website("https://example.com", full_page=False)
+
+    assert result == screenshot
+    mock_capture.assert_awaited_once_with("https://example.com", full_page=False)
+
+
+@pytest.mark.asyncio
+async def test_view_website_uses_default_arguments(monkeypatch):
+    screenshot = Image(data=b"img", format="png")
+    mock_capture = AsyncMock(return_value=screenshot)
+    monkeypatch.setattr(
+        "mcp_web_tools.__init__.capture_webpage_screenshot", mock_capture
+    )
+
+    result = await view_website("https://example.com")
+
+    assert result == screenshot
+    mock_capture.assert_awaited_once_with("https://example.com", full_page=False)
