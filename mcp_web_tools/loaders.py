@@ -130,7 +130,8 @@ async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Im
             browser = await zd.start(headless=True, sandbox=False)
             tab = await browser.get(url)
             await tab.wait_for_ready_state("complete", timeout=5)
-            screenshot_b64 = await tab.screenshot_b64(full_page=full_page)
+            await tab.wait(t=1)
+            screenshot_b64 = await tab.screenshot_b64(format="png", full_page=full_page)
 
             if not screenshot_b64:
                 raise RuntimeError("No screenshot data returned from zendriver")

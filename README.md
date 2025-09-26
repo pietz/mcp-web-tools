@@ -33,6 +33,13 @@ Or to also set the Brave Search API key:
 claude mcp add web-tools uvx mcp-web-tools -e BRAVE_SEARCH_API_KEY=<key>
 ```
 
+Provide a [Perplexity Search API](https://www.perplexity.ai/api-platform) key to prioritize their fresh, citation-rich index:
+
+```bash
+claude mcp add web-tools uvx mcp-web-tools -e PERPLEXITY_API_KEY=<key>
+```
+
+You can mix both environment variables to fall back from Perplexity to Brave seamlessly.
 
 ## Internals
 
@@ -40,7 +47,7 @@ The package is written in Python using powerful libraries and services under the
 
 ### Searching
 
-We use the [Brave Search API](https://brave.com/search/api) if an API key is provided with fallbacks a scraped Google workaround and finally DuckDuckGO if everything else fails. While we'd recommend getting a free Brave API key, the fallbacks should work more than well enough for most use cases and work loads.
+We use the [Perplexity Search API](https://www.perplexity.ai/hub/blog/introducing-the-perplexity-search-api) when a `PERPLEXITY_API_KEY` is configured. It delivers ranked snippets with citations from Perplexity's continuously refreshed index. If no Perplexity key is available, we fall back to the [Brave Search API](https://brave.com/search/api) (via `BRAVE_SEARCH_API_KEY`), then a lightweight Google workaround, and finally DuckDuckGo. While we recommend adding at least one API key, the chained fallbacks continue working for most workloads.
 
 ### Fetching
 

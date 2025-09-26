@@ -1,9 +1,11 @@
-import os
+import asyncio
 import logging
+import os
 
-from duckduckgo_search import DDGS
-import googlesearch
 import httpx
+import googlesearch
+from duckduckgo_search import DDGS
+from perplexity import Perplexity, PerplexityError
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +23,6 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {"X-Subscription-Token": api_key}
     params = {"q": query, "count": limit}
-
-    import asyncio
 
     attempts = 3
     for attempt in range(1, attempts + 1):
@@ -60,6 +60,50 @@ async def brave_search(query: str, limit: int = 10) -> dict | None:
             break
 
     return None
+
+
+async def perplexity_search(query: str, limit: int = 10) -> dict | None:
+    """
+    Search the web using the Perplexity Search API.
+    Returns None if no API key is configured or on failure.
+    """
+
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    if not api_key:
+        return None
+
+    max_results = max(1, limit)
+
+    def _run_search():
+        client = Perplexity(api_key=api_key)
+        return client.search.create(query=query, max_results=max_results)
+
+    try:
+        response = await asyncio.to_thread(_run_search)
+    except PerplexityError as exc:
+        logger.warning("Perplexity Search API failed: %s", exc)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unexpected Perplexity Search error: %s", exc)
+        return None
+
+    if not getattr(response, "results", None):
+        return None
+
+    mapped_results = [
+        {
+            "title": result.title,
+            "url": result.url,
+            "description": result.snippet,
+        }
+        for result in response.results
+        if getattr(result, "title", None) and getattr(result, "url", None)
+    ]
+
+    if not mapped_results:
+        return None
+
+    return {"provider": "perplexity", "results": mapped_results}
 
 
 def google_search(query: str, limit: int = 10) -> dict | None:
@@ -113,10 +157,15 @@ def duckduckgo_search(query: str, limit: int = 10) -> dict | None:
 async def web_search(query: str, limit: int = 10, offset: int = 0) -> dict:
     """
     Search the web using multiple providers, falling back if needed.
-    Tries Brave Search API first (if API key available), then Google, finally DuckDuckGo.
+    Tries Perplexity Search first (if API key available), then Brave, Google, finally DuckDuckGo.
     Returns a dictionary with search results and the provider used.
     """
-    # Try Brave Search first
+    # Try Perplexity Search first
+    results = await perplexity_search(query, limit)
+    if results:
+        return results
+
+    # Try Brave Search next
     results = await brave_search(query, limit)
     if results:
         return results

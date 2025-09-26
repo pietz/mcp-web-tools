@@ -58,19 +58,13 @@ async def fetch_url(
 @mcp.tool()
 async def view_website(
     url: Annotated[str, Field(description="The webpage URL to capture.")],
-    full_page: Annotated[
-        bool,
-        Field(
-            description="Capture the entire scrollable page instead of just the current viewport.",
-        ),
-    ] = False,
 ) -> Image:
     """
     Capture and return a rendered screenshot of a website.
     Helpful when not just the data but also the visuals are relevant.
     """
 
-    return await capture_webpage_screenshot(url, full_page=full_page)
+    return await capture_webpage_screenshot(url, full_page=True)
 
 
 def main():

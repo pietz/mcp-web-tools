@@ -1,11 +1,21 @@
 import logging
 import os
 from unittest.mock import patch, AsyncMock, Mock, call
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from mcp_web_tools.search import brave_search, google_search, duckduckgo_search, web_search
+from perplexity import PerplexityError
+from perplexity.types.search_create_response import Result
+
+from mcp_web_tools.search import (
+    brave_search,
+    duckduckgo_search,
+    google_search,
+    perplexity_search,
+    web_search,
+)
 
 
 class TestBraveSearch:
@@ -172,6 +182,83 @@ class TestBraveSearch:
             assert any("Brave Search API request timed out" in message for message in messages)
 
 
+class TestPerplexitySearch:
+    @pytest.mark.asyncio
+    async def test_perplexity_search_without_api_key(self):
+        with patch.dict(os.environ, {}, clear=True):
+            result = await perplexity_search("test query")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_perplexity_search_success(self):
+        with (
+            patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
+            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+        ):
+            mock_client = mock_client_cls.return_value
+            mock_client.search.create.return_value = SimpleNamespace(
+                results=[
+                    Result(title="Perplexity Title", url="https://perplexity.ai", snippet="Snippet")
+                ]
+            )
+
+            async def fake_to_thread(func, *args, **kwargs):
+                return func(*args, **kwargs)
+
+            with patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread) as mock_to_thread:
+                result = await perplexity_search("test query", limit=5)
+
+        mock_client_cls.assert_called_once_with(api_key="perplex-key")
+        mock_client.search.create.assert_called_once_with(query="test query", max_results=5)
+        mock_to_thread.assert_called_once()
+        assert result is not None
+        assert result["provider"] == "perplexity"
+        assert result["results"][0]["title"] == "Perplexity Title"
+        assert result["results"][0]["url"] == "https://perplexity.ai"
+        assert result["results"][0]["description"] == "Snippet"
+
+    @pytest.mark.asyncio
+    async def test_perplexity_search_handles_sdk_error(self, caplog):
+        with (
+            patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
+            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+        ):
+            mock_client = mock_client_cls.return_value
+            mock_client.search.create.side_effect = PerplexityError("boom")
+
+            async def fake_to_thread(func, *args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as exc:  # pragma: no cover - re-raise for logging
+                    raise exc
+
+            with (
+                patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread),
+            ):
+                caplog.set_level(logging.WARNING, logger="mcp_web_tools.search")
+                result = await perplexity_search("test query")
+
+        assert result is None
+        assert any("Perplexity Search API failed" in rec.getMessage() for rec in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_perplexity_search_returns_none_on_empty_results(self):
+        with (
+            patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
+            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+        ):
+            mock_client = mock_client_cls.return_value
+            mock_client.search.create.return_value = SimpleNamespace(results=[])
+
+            async def fake_to_thread(func, *args, **kwargs):
+                return func(*args, **kwargs)
+
+            with patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread):
+                result = await perplexity_search("test query")
+
+        assert result is None
+
+
 class TestGoogleSearch:
     def test_google_search_success(self):
         mock_result = Mock()
@@ -245,19 +332,50 @@ class TestDuckDuckGoSearch:
 
 class TestWebSearch:
     @pytest.mark.asyncio
+    async def test_web_search_perplexity_success(self):
+        perplexity_result = {
+            "results": [{"title": "Perplexity", "url": "https://perplexity.ai", "description": "Perplexity desc"}],
+            "provider": "perplexity",
+        }
+
+        with (
+            patch("mcp_web_tools.search.perplexity_search", new_callable=AsyncMock) as mock_perplexity,
+            patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave,
+            patch("mcp_web_tools.search.google_search") as mock_google,
+            patch("mcp_web_tools.search.duckduckgo_search") as mock_ddg,
+        ):
+            mock_perplexity.return_value = perplexity_result
+            mock_brave.return_value = None
+            mock_google.return_value = None
+            mock_ddg.return_value = None
+
+            result = await web_search("test query")
+
+        assert result == perplexity_result
+        mock_perplexity.assert_called_once_with("test query", 10)
+        mock_brave.assert_not_called()
+        mock_google.assert_not_called()
+        mock_ddg.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_web_search_brave_success(self):
         brave_result = {
             "results": [{"title": "Brave", "url": "https://brave.com", "description": "Brave desc"}],
             "provider": "brave"
         }
-        
-        with patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave:
+
+        with (
+            patch("mcp_web_tools.search.perplexity_search", new_callable=AsyncMock) as mock_perplexity,
+            patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave,
+        ):
+            mock_perplexity.return_value = None
             mock_brave.return_value = brave_result
-            
+
             result = await web_search("test query")
-            
-            assert result == brave_result
-            mock_brave.assert_called_once_with("test query", 10)
+
+        assert result == brave_result
+        mock_perplexity.assert_called_once()
+        mock_brave.assert_called_once_with("test query", 10)
 
     @pytest.mark.asyncio
     async def test_web_search_fallback_to_google(self):
@@ -266,16 +384,21 @@ class TestWebSearch:
             "provider": "google"
         }
         
-        with patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave:
-            with patch("mcp_web_tools.search.google_search") as mock_google:
-                mock_brave.return_value = None
-                mock_google.return_value = google_result
-                
-                result = await web_search("test query")
-                
-                assert result == google_result
-                mock_brave.assert_called_once()
-                mock_google.assert_called_once()
+        with (
+            patch("mcp_web_tools.search.perplexity_search", new_callable=AsyncMock) as mock_perplexity,
+            patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave,
+            patch("mcp_web_tools.search.google_search") as mock_google,
+        ):
+            mock_perplexity.return_value = None
+            mock_brave.return_value = None
+            mock_google.return_value = google_result
+
+            result = await web_search("test query")
+
+        assert result == google_result
+        mock_perplexity.assert_called_once()
+        mock_brave.assert_called_once()
+        mock_google.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_web_search_fallback_to_duckduckgo(self):
@@ -284,32 +407,42 @@ class TestWebSearch:
             "provider": "duckduckgo"
         }
         
-        with patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave:
-            with patch("mcp_web_tools.search.google_search") as mock_google:
-                with patch("mcp_web_tools.search.duckduckgo_search") as mock_ddg:
-                    mock_brave.return_value = None
-                    mock_google.return_value = None
-                    mock_ddg.return_value = ddg_result
-                    
-                    result = await web_search("test query")
-                    
-                    assert result == ddg_result
-                    mock_brave.assert_called_once()
-                    mock_google.assert_called_once()
-                    mock_ddg.assert_called_once()
+        with (
+            patch("mcp_web_tools.search.perplexity_search", new_callable=AsyncMock) as mock_perplexity,
+            patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave,
+            patch("mcp_web_tools.search.google_search") as mock_google,
+            patch("mcp_web_tools.search.duckduckgo_search") as mock_ddg,
+        ):
+            mock_perplexity.return_value = None
+            mock_brave.return_value = None
+            mock_google.return_value = None
+            mock_ddg.return_value = ddg_result
+
+            result = await web_search("test query")
+
+        assert result == ddg_result
+        mock_perplexity.assert_called_once()
+        mock_brave.assert_called_once()
+        mock_google.assert_called_once()
+        mock_ddg.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_web_search_all_fail(self):
-        with patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave:
-            with patch("mcp_web_tools.search.google_search") as mock_google:
-                with patch("mcp_web_tools.search.duckduckgo_search") as mock_ddg:
-                    mock_brave.return_value = None
-                    mock_google.return_value = None
-                    mock_ddg.return_value = None
-                    
-                    result = await web_search("test query")
-                    
-                    assert result == {"results": [], "provider": "none"}
-                    mock_brave.assert_called_once()
-                    mock_google.assert_called_once()
-                    mock_ddg.assert_called_once()
+        with (
+            patch("mcp_web_tools.search.perplexity_search", new_callable=AsyncMock) as mock_perplexity,
+            patch("mcp_web_tools.search.brave_search", new_callable=AsyncMock) as mock_brave,
+            patch("mcp_web_tools.search.google_search") as mock_google,
+            patch("mcp_web_tools.search.duckduckgo_search") as mock_ddg,
+        ):
+            mock_perplexity.return_value = None
+            mock_brave.return_value = None
+            mock_google.return_value = None
+            mock_ddg.return_value = None
+
+            result = await web_search("test query")
+
+        assert result == {"results": [], "provider": "none"}
+        mock_perplexity.assert_called_once()
+        mock_brave.assert_called_once()
+        mock_google.assert_called_once()
+        mock_ddg.assert_called_once()

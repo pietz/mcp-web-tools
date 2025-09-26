@@ -196,6 +196,7 @@ async def test_capture_webpage_screenshot_returns_image():
 
     tab = SimpleNamespace(
         wait_for_ready_state=AsyncMock(return_value=None),
+        wait=AsyncMock(return_value=None),
         screenshot_b64=AsyncMock(return_value=screenshot_b64),
     )
     browser = SimpleNamespace(
@@ -213,7 +214,8 @@ async def test_capture_webpage_screenshot_returns_image():
     assert result._format == "png"
     browser.get.assert_awaited_once_with("https://example.com")
     tab.wait_for_ready_state.assert_awaited_once_with("complete", timeout=5)
-    tab.screenshot_b64.assert_awaited_once_with(full_page=False)
+    tab.wait.assert_awaited_once_with(t=1)
+    tab.screenshot_b64.assert_awaited_once_with(format="png", full_page=False)
     browser.stop.assert_awaited_once_with()
 
 
@@ -221,6 +223,7 @@ async def test_capture_webpage_screenshot_returns_image():
 async def test_capture_webpage_screenshot_raises_when_no_data():
     tab = SimpleNamespace(
         wait_for_ready_state=AsyncMock(return_value=None),
+        wait=AsyncMock(return_value=None),
         screenshot_b64=AsyncMock(return_value=""),
     )
     browser = SimpleNamespace(
@@ -234,4 +237,5 @@ async def test_capture_webpage_screenshot_raises_when_no_data():
             await capture_webpage_screenshot("https://example.com/missing")
 
     browser.stop.assert_awaited_once_with()
-    tab.screenshot_b64.assert_awaited_once_with(full_page=False)
+    tab.wait.assert_awaited_once_with(t=1)
+    tab.screenshot_b64.assert_awaited_once_with(format="png", full_page=False)

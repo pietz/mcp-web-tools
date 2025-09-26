@@ -49,10 +49,10 @@ async def test_view_website_delegates_to_screenshot_loader(monkeypatch):
         "mcp_web_tools.__init__.capture_webpage_screenshot", mock_capture
     )
 
-    result = await view_website("https://example.com", full_page=False)
+    result = await view_website("https://example.com")
 
     assert result == screenshot
-    mock_capture.assert_awaited_once_with("https://example.com", full_page=False)
+    mock_capture.assert_awaited_once_with("https://example.com", full_page=True)
 
 
 @pytest.mark.asyncio
@@ -66,4 +66,4 @@ async def test_view_website_uses_default_arguments(monkeypatch):
     result = await view_website("https://example.com")
 
     assert result == screenshot
-    mock_capture.assert_awaited_once_with("https://example.com", full_page=False)
+    mock_capture.assert_awaited_once_with("https://example.com", full_page=True)
