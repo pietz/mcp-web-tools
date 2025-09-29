@@ -16,6 +16,87 @@ from mcp.server.fastmcp import Image
 logger = logging.getLogger(__name__)
 
 
+def _fetch_with_trafilatura(url: str) -> tuple[str | None, str | None]:
+    try:
+        logger.info("Attempting to fetch %s with trafilatura", url)
+        html = trafilatura.fetch_url(url)
+        if html:
+            return html, "trafilatura"
+    except Exception as exc:
+        logger.error("Error fetching page with trafilatura: %s", exc)
+    return None, None
+
+
+async def _fetch_with_zendriver(url: str) -> tuple[str | None, str | None]:
+    browser = None
+    try:
+        browser = await zd.start(headless=True, sandbox=False)
+        page = await browser.get(url)
+        await page.wait_for_ready_state("complete", timeout=5)
+        await page.wait(t=1)  # Allow dynamic content to settle
+        html = await page.get_content()
+        if html:
+            return html, "zendriver"
+    except Exception as exc:
+        logger.warning("Error fetching page with zendriver: %s", exc)
+    finally:
+        if browser:
+            try:
+                await browser.stop()
+            except Exception:
+                pass
+    return None, None
+
+
+async def _fetch_html(url: str) -> tuple[str | None, str | None]:
+    html, provider = _fetch_with_trafilatura(url)
+    if html:
+        return html, provider
+    return await _fetch_with_zendriver(url)
+
+
+def _extract_markdown(html: str) -> tuple[str | None, str | None]:
+    try:
+        content = trafilatura.extract(
+            html,
+            output_format="markdown",
+            include_images=True,
+            include_links=True,
+        )
+    except Exception as exc:
+        logger.error("Error extracting content with trafilatura: %s", exc)
+        return None, f"Error: Failed to extract readable content: {exc}"
+    if not content:
+        return None, None
+    return content, None
+
+
+def _format_frontmatter(
+    *,
+    fetched: str | None,
+    extracted: str | None,
+    start: int,
+    end: int,
+    length: int,
+) -> str:
+    lines = ["---"]
+    lines.append(f"fetched: {fetched or 'unknown'}")
+    lines.append(f"extracted: {extracted or 'none'}")
+    lines.append(f"start: {start}")
+    lines.append(f"end: {end}")
+    lines.append(f"length: {length}")
+    lines.append("---")
+    return "\n".join(lines) + "\n\n"
+
+
+def _slice_text(text: str, start: int, limit: int) -> tuple[str, int]:
+    if limit <= 0:
+        end = len(text)
+    else:
+        end = min(start + limit, len(text))
+    return text[start:end], end
+
+
 async def load_webpage(
     url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
 ) -> str:
@@ -31,83 +112,55 @@ async def load_webpage(
     """
     try:
         async with asyncio.timeout(10):
-            # Initialize html, provider and browser to None
-            html = None
-            provider = None  # Will be set to 'trafilatura' or 'zendriver'
-            browser = None
-
-            try:
-                logger.info(f"Attempting to fetch {url} with trafilatura")
-                html = trafilatura.fetch_url(url)
-                if html:
-                    provider = "trafilatura"
-            except Exception as e:
-                logger.error(f"Error fetching page with trafilatura: {str(e)}")
-
-            if not html:
-                try:
-                    browser = await zd.start(headless=True, sandbox=False)
-                    page = await browser.get(url)
-                    await page.wait_for_ready_state("complete", timeout=5)
-                    await page.wait(t=1) # Wait a bit for dynamic content
-                    html = await page.get_content()
-                    if html:
-                        provider = "zendriver"
-                except Exception as e:
-                    logger.warning(
-                        f"Error fetching page with zendriver: {str(e)}, trying trafilatura next"
-                    )
-                finally:
-                    # Ensure browser is closed even if an error occurs
-                    if browser:
-                        try:
-                            await browser.stop()
-                        except Exception:
-                            pass  # Ignore errors during browser closing
-
-            # If both methods failed, return error
+            html, fetch_provider = await _fetch_html(url)
             if not html:
                 logger.error(
-                    f"Failed to retrieve content from {url} using both zendriver and trafilatura"
+                    "Failed to retrieve content from %s using both zendriver and trafilatura",
+                    url,
                 )
                 return f"Error: Failed to retrieve page content from {url} using multiple methods"
 
+            extraction_provider: str | None = None
+            warning: str | None = None
+            source = html
+
             if raw:
-                note = f"_Fetched via: {provider}_\n\n" if provider else ""
-                res = html[offset : offset + limit]
-                res += f"\n\n---Showing {offset} to {min(offset + limit, len(html))} out of {len(html)} characters.---"
-                return note + res
+                extraction_provider = "raw"
+            else:
+                content, extraction_error = _extract_markdown(html)
+                if extraction_error:
+                    return extraction_error
+                if content:
+                    source = content
+                    extraction_provider = "trafilatura"
+                else:
+                    extraction_provider = "raw"
+                    warning = (
+                        f"Warning: Could not extract readable content from {url}. "
+                        "Showing raw HTML instead."
+                    )
 
-            try:
-                content = trafilatura.extract(
-                    html,
-                    output_format="markdown",
-                    include_images=True,
-                    include_links=True,
-                )
-            except Exception as e:
-                logger.error(f"Error extracting content with trafilatura: {str(e)}")
-                return f"Error: Failed to extract readable content: {str(e)}"
+            total_length = len(source)
+            content_slice, slice_end = _slice_text(source, offset, limit)
+            frontmatter = _format_frontmatter(
+                fetched=fetch_provider,
+                extracted=extraction_provider,
+                start=offset,
+                end=slice_end,
+                length=total_length,
+            )
 
-            if not content:
-                logger.warning(f"Failed to extract content from {url}")
-                # Fallback to raw HTML with a warning
-                note = f"_Fetched via: {provider}_\n\n" if provider else ""
-                return (
-                    f"{note}Warning: Could not extract readable content from {url}. "
-                    f"Showing raw HTML instead.\n\n{html[offset : offset + limit]}"
-                )
-
-            note = f"_Fetched via: {provider}_\n\n" if provider else ""
-            res = content[offset : offset + limit]
-            res += f"\n\n---Showing {offset} to {min(offset + limit, len(content))} out of {len(content)} characters.---"
-            return note + res
+            parts = [frontmatter]
+            if warning:
+                parts.append(f"{warning}\n\n")
+            parts.append(content_slice)
+            return "".join(parts)
 
     except asyncio.TimeoutError:
-        logger.error(f"Request timed out after 10 seconds for URL: {url}")
+        logger.error("Request timed out after 10 seconds for URL: %s", url)
         return f"Error: Request timed out after 10 seconds for URL: {url}"
     except Exception as e:
-        logger.error(f"Error loading page: {str(e)}")
+        logger.error("Error loading page: %s", e)
         return f"Error loading page: {str(e)}"
 
 

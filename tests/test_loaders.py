@@ -24,9 +24,14 @@ async def test_load_webpage_uses_trafilatura_first():
     ):
         result = await load_webpage("https://example.com/page", limit=100)
 
-    assert result.startswith("_Fetched via: trafilatura_")
-    assert "Hello from page" in result
-    assert "---Showing 0 to" in result
+    frontmatter, body = result.split("\n\n", 1)
+    assert frontmatter.startswith("---")
+    assert "fetched: trafilatura" in frontmatter
+    assert "extracted: trafilatura" in frontmatter
+    assert "start: 0" in frontmatter
+    assert f"end: {len(markdown)}" in frontmatter
+    assert f"length: {len(markdown)}" in frontmatter
+    assert body.strip() == "Hello from page"
     mock_fetch.assert_called_once_with("https://example.com/page")
     mock_extract.assert_called_once()
     mock_start.assert_not_called()
@@ -55,8 +60,13 @@ async def test_load_webpage_falls_back_to_zendriver():
         mock_start.return_value = browser
         result = await load_webpage("https://example.com/page")
 
-    assert result.startswith("_Fetched via: zendriver_")
-    assert "Zendriver content" in result
+    frontmatter, body = result.split("\n\n", 1)
+    assert "fetched: zendriver" in frontmatter
+    assert "extracted: trafilatura" in frontmatter
+    assert "start: 0" in frontmatter
+    assert f"end: {len(markdown)}" in frontmatter
+    assert f"length: {len(markdown)}" in frontmatter
+    assert body.strip() == "Zendriver content"
     assert browser.get.await_args_list[0].args == ("https://example.com/page",)
     page.wait_for_ready_state.assert_awaited_once_with("complete", timeout=5)
     page.wait.assert_awaited_once_with(t=1)
@@ -76,8 +86,13 @@ async def test_load_webpage_raw_html_short_circuits_extraction():
     ):
         result = await load_webpage("https://example.com/raw", limit=5, raw=True)
 
-    assert result.startswith("_Fetched via: trafilatura_")
-    assert "<html" in result
+    frontmatter, body = result.split("\n\n", 1)
+    assert "fetched: trafilatura" in frontmatter
+    assert "extracted: raw" in frontmatter
+    assert "start: 0" in frontmatter
+    assert "end: 5" in frontmatter
+    assert f"length: {len(html)}" in frontmatter
+    assert body.startswith("<html")
     assert mock_extract.call_count == 0
     mock_start.assert_not_called()
 
@@ -92,8 +107,11 @@ async def test_load_webpage_returns_warning_when_extraction_empty():
     ):
         result = await load_webpage("https://example.com/empty")
 
-    assert "Warning: Could not extract readable content" in result
-    assert "<html><body>No extract</body></html>" in result
+    frontmatter, body = result.split("\n\n", 1)
+    assert "extracted: raw" in frontmatter
+    assert f"length: {len(html)}" in frontmatter
+    assert "Warning: Could not extract readable content" in body
+    assert "<html><body>No extract</body></html>" in body
 
 
 @pytest.mark.asyncio
