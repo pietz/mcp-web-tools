@@ -193,24 +193,25 @@ class TestPerplexitySearch:
     async def test_perplexity_search_success(self):
         with (
             patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
-            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+            patch("mcp_web_tools.search.AsyncPerplexity") as mock_client_cls,
         ):
             mock_client = mock_client_cls.return_value
-            mock_client.search.create.return_value = SimpleNamespace(
-                results=[
-                    Result(title="Perplexity Title", url="https://perplexity.ai", snippet="Snippet")
-                ]
+            mock_client.search.create = AsyncMock(
+                return_value=SimpleNamespace(
+                    results=[
+                        Result(
+                            title="Perplexity Title",
+                            url="https://perplexity.ai",
+                            snippet="Snippet",
+                        )
+                    ]
+                )
             )
 
-            async def fake_to_thread(func, *args, **kwargs):
-                return func(*args, **kwargs)
-
-            with patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread) as mock_to_thread:
-                result = await perplexity_search("test query", limit=5)
+            result = await perplexity_search("test query", limit=5)
 
         mock_client_cls.assert_called_once_with(api_key="perplex-key")
-        mock_client.search.create.assert_called_once_with(query="test query", max_results=5)
-        mock_to_thread.assert_called_once()
+        mock_client.search.create.assert_awaited_once_with(query="test query", max_results=5)
         assert result is not None
         assert result["provider"] == "perplexity"
         assert result["results"][0]["title"] == "Perplexity Title"
@@ -221,22 +222,13 @@ class TestPerplexitySearch:
     async def test_perplexity_search_handles_sdk_error(self, caplog):
         with (
             patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
-            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+            patch("mcp_web_tools.search.AsyncPerplexity") as mock_client_cls,
         ):
             mock_client = mock_client_cls.return_value
-            mock_client.search.create.side_effect = PerplexityError("boom")
+            mock_client.search.create = AsyncMock(side_effect=PerplexityError("boom"))
 
-            async def fake_to_thread(func, *args, **kwargs):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as exc:  # pragma: no cover - re-raise for logging
-                    raise exc
-
-            with (
-                patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread),
-            ):
-                caplog.set_level(logging.WARNING, logger="mcp_web_tools.search")
-                result = await perplexity_search("test query")
+            caplog.set_level(logging.WARNING, logger="mcp_web_tools.search")
+            result = await perplexity_search("test query")
 
         assert result is None
         assert any("Perplexity Search API failed" in rec.getMessage() for rec in caplog.records)
@@ -245,16 +237,12 @@ class TestPerplexitySearch:
     async def test_perplexity_search_returns_none_on_empty_results(self):
         with (
             patch.dict(os.environ, {"PERPLEXITY_API_KEY": "perplex-key"}, clear=True),
-            patch("mcp_web_tools.search.Perplexity") as mock_client_cls,
+            patch("mcp_web_tools.search.AsyncPerplexity") as mock_client_cls,
         ):
             mock_client = mock_client_cls.return_value
-            mock_client.search.create.return_value = SimpleNamespace(results=[])
+            mock_client.search.create = AsyncMock(return_value=SimpleNamespace(results=[]))
 
-            async def fake_to_thread(func, *args, **kwargs):
-                return func(*args, **kwargs)
-
-            with patch("mcp_web_tools.search.asyncio.to_thread", side_effect=fake_to_thread):
-                result = await perplexity_search("test query")
+            result = await perplexity_search("test query")
 
         assert result is None
 

@@ -16,7 +16,7 @@ async def test_search_web_tool_delegates_to_web_search(monkeypatch):
     result = await search_web("query", offset=2)
 
     assert result == expected
-    mock_web_search.assert_awaited_once_with("query", 10, 2)
+    mock_web_search.assert_awaited_once_with("query", 5, 2)
 
 
 @pytest.mark.asyncio

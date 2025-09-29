@@ -5,7 +5,7 @@ import os
 import httpx
 import googlesearch
 from duckduckgo_search import DDGS
-from perplexity import Perplexity, PerplexityError
+from perplexity import PerplexityError, AsyncPerplexity
 
 
 logger = logging.getLogger(__name__)
@@ -72,14 +72,10 @@ async def perplexity_search(query: str, limit: int = 10) -> dict | None:
     if not api_key:
         return None
 
-    max_results = max(1, limit)
-
-    def _run_search():
-        client = Perplexity(api_key=api_key)
-        return client.search.create(query=query, max_results=max_results)
+    client = AsyncPerplexity(api_key=api_key)
 
     try:
-        response = await asyncio.to_thread(_run_search)
+        response = await client.search.create(query=query, max_results=limit)
     except PerplexityError as exc:
         logger.warning("Perplexity Search API failed: %s", exc)
         return None

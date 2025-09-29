@@ -39,6 +39,7 @@ async def test_load_webpage_falls_back_to_zendriver():
 
     page = SimpleNamespace(
         wait_for_ready_state=AsyncMock(return_value=None),
+        wait=AsyncMock(return_value=None),
         get_content=AsyncMock(return_value=html),
     )
     browser = SimpleNamespace(
@@ -58,6 +59,7 @@ async def test_load_webpage_falls_back_to_zendriver():
     assert "Zendriver content" in result
     assert browser.get.await_args_list[0].args == ("https://example.com/page",)
     page.wait_for_ready_state.assert_awaited_once_with("complete", timeout=5)
+    page.wait.assert_awaited_once_with(t=1)
     page.get_content.assert_awaited_once_with()
     browser.stop.assert_awaited_once_with()
     mock_start.assert_awaited_once_with(headless=True, sandbox=False)
