@@ -49,6 +49,7 @@ async def load_webpage(
                     browser = await zd.start(headless=True, sandbox=False)
                     page = await browser.get(url)
                     await page.wait_for_ready_state("complete", timeout=5)
+                    await page.wait(t=1) # Wait a bit for dynamic content
                     html = await page.get_content()
                     if html:
                         provider = "zendriver"

@@ -15,6 +15,14 @@ mcp = FastMCP("Web Tools", log_level="INFO")
 @mcp.tool()
 async def search_web(
     query: Annotated[str, Field(description="The search query to use.")],
+    limit: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=20,
+            description="Number of results (max 20).",
+        ),
+    ] = 5,
     offset: Annotated[
         int,
         Field(
@@ -24,11 +32,11 @@ async def search_web(
     ] = 0,
 ) -> dict:
     """
-    Execute a web search using the given search query and returns 10 results.
-    Tries to use Brave first, then Google, finally DuckDuckGo as fallbacks.
-    Returns a dictionary with 'results' (list of search results) and 'provider' (search engine used).
+    Execute a web search using the given search query.
+    Returns a list of results including title, URL, and a rich content snippet.
+    
     """
-    return await web_search(query, 10, offset)
+    return await web_search(query, limit, offset)
 
 
 @mcp.tool()
