@@ -26,6 +26,16 @@ def _fetch_with_trafilatura(url: str) -> tuple[str | None, str | None]:
         logger.error("Error fetching page with trafilatura: %s", exc)
     return None, None
 
+def _fetch_with_httpx(url: str) -> tuple[str | None, str | None]:
+    try:
+        logger.info("Attempting to fetch %s with httpx", url)
+        response = httpx.get(url, follow_redirects=True, timeout=10)
+        response.raise_for_status()
+        return response.text, "httpx"
+    except Exception as exc:
+        logger.error("Error fetching page with httpx: %s", exc)
+    return None, None
+
 
 async def _fetch_with_zendriver(url: str) -> tuple[str | None, str | None]:
     browser = None
@@ -50,6 +60,9 @@ async def _fetch_with_zendriver(url: str) -> tuple[str | None, str | None]:
 
 async def _fetch_html(url: str) -> tuple[str | None, str | None]:
     html, provider = _fetch_with_trafilatura(url)
+    if html:
+        return html, provider
+    html, provider = _fetch_with_httpx(url)
     if html:
         return html, provider
     return await _fetch_with_zendriver(url)
