@@ -488,7 +488,7 @@ wheels = [
 
 [[package]]
 name = "mcp-web-tools"
-version = "0.8.3"
+version = "0.8.5"
 source = { editable = "." }
 dependencies = [
     { name = "duckduckgo-search" },
