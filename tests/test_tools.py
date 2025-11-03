@@ -24,10 +24,21 @@ async def test_fetch_url_tool_delegates_with_arguments(monkeypatch):
     mock_loader = AsyncMock(return_value="content")
     monkeypatch.setattr("mcp_web_tools.__init__.load_content", mock_loader)
 
-    result = await fetch_url("https://example.com/page", offset=5, raw=True)
+    result = await fetch_url(
+        "https://example.com/page",
+        offset=5,
+        raw=True,
+        fetch_provider="zendriver",
+    )
 
     assert result == "content"
-    mock_loader.assert_awaited_once_with("https://example.com/page", 20_000, 5, True)
+    mock_loader.assert_awaited_once_with(
+        "https://example.com/page",
+        limit=20_000,
+        offset=5,
+        raw=True,
+        fetch_provider="zendriver",
+    )
 
 
 @pytest.mark.asyncio
@@ -35,10 +46,16 @@ async def test_fetch_url_tool_uses_default_arguments(monkeypatch):
     mock_loader = AsyncMock(return_value="default")
     monkeypatch.setattr("mcp_web_tools.__init__.load_content", mock_loader)
 
-    result = await fetch_url("https://example.com/other", offset=0, raw=False)
+    result = await fetch_url("https://example.com/other", offset=0)
 
     assert result == "default"
-    mock_loader.assert_awaited_once_with("https://example.com/other", 20_000, 0, False)
+    mock_loader.assert_awaited_once_with(
+        "https://example.com/other",
+        limit=20_000,
+        offset=0,
+        raw=False,
+        fetch_provider="auto",
+    )
 
 
 @pytest.mark.asyncio

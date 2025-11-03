@@ -15,6 +15,8 @@ from mcp.server.fastmcp import Image
 
 logger = logging.getLogger(__name__)
 
+FETCH_PROVIDER_CHOICES = {"auto", "trafilatura", "httpx", "zendriver"}
+
 
 def _fetch_with_trafilatura(url: str) -> tuple[str | None, str | None]:
     try:
@@ -58,14 +60,35 @@ async def _fetch_with_zendriver(url: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-async def _fetch_html(url: str) -> tuple[str | None, str | None]:
-    html, provider = _fetch_with_trafilatura(url)
-    if html:
-        return html, provider
-    html, provider = _fetch_with_httpx(url)
-    if html:
-        return html, provider
-    return await _fetch_with_zendriver(url)
+async def _fetch_html(url: str, *, provider: str = "auto") -> tuple[str | None, str]:
+    choice = (provider or "auto").lower()
+
+    if choice == "auto":
+        html, provider_name = _fetch_with_trafilatura(url)
+        if html:
+            return html, provider_name or "trafilatura"
+        html, provider_name = _fetch_with_httpx(url)
+        if html:
+            return html, provider_name or "httpx"
+        html, provider_name = await _fetch_with_zendriver(url)
+        if html:
+            return html, provider_name or "zendriver"
+        return None, "auto"
+
+    if choice == "trafilatura":
+        html, provider_name = _fetch_with_trafilatura(url)
+        return html, provider_name or "trafilatura"
+
+    if choice == "httpx":
+        html, provider_name = _fetch_with_httpx(url)
+        return html, provider_name or "httpx"
+
+    if choice == "zendriver":
+        html, provider_name = await _fetch_with_zendriver(url)
+        return html, provider_name or "zendriver"
+
+    # The caller validates the provider; fall back defensively.
+    return None, choice
 
 
 def _extract_markdown(html: str) -> tuple[str | None, str | None]:
@@ -111,7 +134,11 @@ def _slice_text(text: str, start: int, limit: int) -> tuple[str, int]:
 
 
 async def load_webpage(
-    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
+    url: str,
+    limit: int = 10_000,
+    offset: int = 0,
+    raw: bool = False,
+    fetch_provider: str = "auto",
 ) -> str:
     """
     Fetch the content from a URL and return it in cleaned Markdown format.
@@ -119,35 +146,41 @@ async def load_webpage(
         url: The URL to fetch content from
         limit: Maximum number of characters to return
         offset: Character offset to start from
-        raw: If True, returns raw HTML instead of cleaned Markdown
+        fetch_provider: Fetching backend to use ("auto", "trafilatura", "httpx", "zendriver")
+        raw: When True, skip extraction and return raw HTML.
     Returns:
         Extracted content as string (Markdown or raw HTML)
     """
+    fetch_choice = (fetch_provider or "auto").lower()
+    if fetch_choice not in FETCH_PROVIDER_CHOICES:
+        logger.error("Unsupported fetch provider requested: %s", fetch_provider)
+        return f"Error: Unsupported fetch provider '{fetch_provider}'"
+
     try:
         async with asyncio.timeout(10):
-            html, fetch_provider = await _fetch_html(url)
+            html, fetch_provider_used = await _fetch_html(url, provider=fetch_choice)
             if not html:
-                logger.error(
-                    "Failed to retrieve content from %s using both zendriver and trafilatura",
-                    url,
+                failure_target = (
+                    "multiple methods" if fetch_choice == "auto" else f"provider {fetch_choice}"
                 )
-                return f"Error: Failed to retrieve page content from {url} using multiple methods"
+                logger.error("Failed to retrieve content from %s using %s", url, failure_target)
+                return f"Error: Failed to retrieve page content from {url} using {failure_target}"
 
-            extraction_provider: str | None = None
             warning: str | None = None
             source = html
+            extracted_by: str
 
             if raw:
-                extraction_provider = "raw"
+                extracted_by = "raw"
             else:
                 content, extraction_error = _extract_markdown(html)
                 if extraction_error:
                     return extraction_error
                 if content:
                     source = content
-                    extraction_provider = "trafilatura"
+                    extracted_by = "trafilatura"
                 else:
-                    extraction_provider = "raw"
+                    extracted_by = "raw"
                     warning = (
                         f"Warning: Could not extract readable content from {url}. "
                         "Showing raw HTML instead."
@@ -156,8 +189,8 @@ async def load_webpage(
             total_length = len(source)
             content_slice, slice_end = _slice_text(source, offset, limit)
             frontmatter = _format_frontmatter(
-                fetched=fetch_provider,
-                extracted=extraction_provider,
+                fetched=fetch_provider_used,
+                extracted=extracted_by,
                 start=offset,
                 end=slice_end,
                 length=total_length,
@@ -227,7 +260,10 @@ async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Im
 
 
 async def load_pdf_document(
-    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
+    url: str,
+    limit: int = 10_000,
+    offset: int = 0,
+    raw: bool = False,
 ) -> str:
     """
     Fetch a PDF file from the internet and extract its content.
@@ -235,7 +271,7 @@ async def load_pdf_document(
         url: URL to the PDF file
         limit: Maximum number of characters to return
         offset: Character offset to start from
-        raw: If True, returns raw text instead of formatted Markdown
+        raw: When True, return the plain text extracted from each page.
     Returns:
         Extracted content as string
     """
@@ -314,7 +350,11 @@ async def load_image_file(url: str) -> Image:
 
 
 async def load_content(
-    url: str, limit: int = 10_000, offset: int = 0, raw: bool = False
+    url: str,
+    limit: int = 10_000,
+    offset: int = 0,
+    raw: bool = False,
+    fetch_provider: str = "auto",
 ):
     """
     Universal content loader that handles different content types based on URL pattern.
@@ -323,7 +363,8 @@ async def load_content(
         url: The URL to fetch content from
         limit: Maximum number of characters to return (for text content)
         offset: Character offset to start from (for text content)
-        raw: If True, returns raw content instead of processed format
+        fetch_provider: Fetching backend to use for webpages
+        raw: When True, skip HTML/Markdown extraction and return raw output for webpages and PDFs.
 
     Returns:
         Extracted content as string or Image object depending on content type
@@ -356,7 +397,13 @@ async def load_content(
         elif content_type == "pdf":
             return await load_pdf_document(url, limit, offset, raw)
         else:  # webpage
-            return await load_webpage(url, limit, offset, raw)
+            return await load_webpage(
+                url,
+                limit,
+                offset,
+                raw,
+                fetch_provider=fetch_provider,
+            )
     except ValueError as e:
         # Re-raise ValueError from image loader
         raise e

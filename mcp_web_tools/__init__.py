@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -52,15 +52,27 @@ async def fetch_url(
     raw: Annotated[
         bool,
         Field(
-            description="Return raw content instead cleaning it. Relevant for webpages and PDFs.",
+            description="Return raw content instead of cleaned Markdown when possible.",
         ),
     ] = False,
+    fetch_provider: Annotated[
+        Literal["auto", "trafilatura", "httpx", "zendriver"],
+        Field(
+            description="Choose the fetching backend. 'auto' tries lightweight fetchers before Zendriver.",
+        ),
+    ] = "auto",
 ):
     """
     Universal content loader that fetches and processes content from any URL.
     Automatically detects content type (webpage, PDF, or image) based on URL.
     """
-    return await load_content(url, 20_000, offset, raw)
+    return await load_content(
+        url,
+        limit=20_000,
+        offset=offset,
+        raw=raw,
+        fetch_provider=fetch_provider,
+    )
 
 
 @mcp.tool()

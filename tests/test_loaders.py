@@ -76,6 +76,41 @@ async def test_load_webpage_falls_back_to_zendriver():
 
 
 @pytest.mark.asyncio
+async def test_load_webpage_fetch_provider_zendriver_skips_light_fetchers():
+    html = "<html>Zendriver Only</html>"
+    markdown = "Zen content"
+
+    page = SimpleNamespace(
+        wait_for_ready_state=AsyncMock(return_value=None),
+        wait=AsyncMock(return_value=None),
+        get_content=AsyncMock(return_value=html),
+    )
+    browser = SimpleNamespace(
+        get=AsyncMock(return_value=page),
+        stop=AsyncMock(return_value=None),
+    )
+
+    with (
+        patch("mcp_web_tools.loaders.trafilatura.fetch_url") as mock_fetch,
+        patch("mcp_web_tools.loaders.httpx.get") as mock_httpx,
+        patch("mcp_web_tools.loaders.zd.start", new_callable=AsyncMock) as mock_start,
+        patch("mcp_web_tools.loaders.trafilatura.extract", return_value=markdown),
+    ):
+        mock_start.return_value = browser
+        result = await load_webpage("https://example.com/zen", fetch_provider="zendriver")
+
+    frontmatter, body = result.split("\n\n", 1)
+    assert "fetched: zendriver" in frontmatter
+    assert "extracted: trafilatura" in frontmatter
+    assert body.strip() == markdown
+    mock_fetch.assert_not_called()
+    mock_httpx.assert_not_called()
+    page.get_content.assert_awaited_once()
+    browser.stop.assert_awaited_once_with()
+    mock_start.assert_awaited_once_with(headless=True, sandbox=False)
+
+
+@pytest.mark.asyncio
 async def test_load_webpage_raw_html_short_circuits_extraction():
     html = "<html>Example</html>"
 
@@ -84,7 +119,11 @@ async def test_load_webpage_raw_html_short_circuits_extraction():
         patch("mcp_web_tools.loaders.trafilatura.extract") as mock_extract,
         patch("mcp_web_tools.loaders.zd.start", new_callable=AsyncMock) as mock_start,
     ):
-        result = await load_webpage("https://example.com/raw", limit=5, raw=True)
+        result = await load_webpage(
+            "https://example.com/raw",
+            limit=5,
+            raw=True,
+        )
 
     frontmatter, body = result.split("\n\n", 1)
     assert "fetched: trafilatura" in frontmatter
@@ -94,6 +133,25 @@ async def test_load_webpage_raw_html_short_circuits_extraction():
     assert f"length: {len(html)}" in frontmatter
     assert body.startswith("<html")
     assert mock_extract.call_count == 0
+    mock_start.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_webpage_raw_flag_overrides_default():
+    html = "<html>Example</html>"
+
+    with (
+        patch("mcp_web_tools.loaders.trafilatura.fetch_url", return_value=html),
+        patch("mcp_web_tools.loaders.trafilatura.extract") as mock_extract,
+        patch("mcp_web_tools.loaders.zd.start", new_callable=AsyncMock) as mock_start,
+    ):
+        result = await load_webpage("https://example.com/raw", raw=True)
+
+    frontmatter, body = result.split("\n\n", 1)
+    assert "fetched: trafilatura" in frontmatter
+    assert "extracted: raw" in frontmatter
+    assert body.startswith("<html")
+    mock_extract.assert_not_called()
     mock_start.assert_not_called()
 
 
@@ -153,10 +211,10 @@ async def test_load_content_dispatches_to_pdf_loader():
         patch("mcp_web_tools.loaders.load_webpage", new_callable=AsyncMock) as mock_webpage,
     ):
         mock_pdf.return_value = "pdf"
-        result = await load_content("https://example.com/manual.pdf", limit=500, offset=10, raw=True)
+        result = await load_content("https://example.com/manual.pdf", limit=500, offset=10)
 
     assert result == "pdf"
-    mock_pdf.assert_awaited_once_with("https://example.com/manual.pdf", 500, 10, True)
+    mock_pdf.assert_awaited_once_with("https://example.com/manual.pdf", 500, 10, False)
     mock_image.assert_not_called()
     mock_webpage.assert_not_called()
 
@@ -169,12 +227,42 @@ async def test_load_content_dispatches_to_webpage_loader():
         patch("mcp_web_tools.loaders.load_webpage", new_callable=AsyncMock) as mock_webpage,
     ):
         mock_webpage.return_value = "page"
-        result = await load_content("https://example.com/article", limit=750, offset=5, raw=False)
+        result = await load_content("https://example.com/article", limit=750, offset=5)
 
     assert result == "page"
-    mock_webpage.assert_awaited_once_with("https://example.com/article", 750, 5, False)
+    mock_webpage.assert_awaited_once_with(
+        "https://example.com/article",
+        750,
+        5,
+        False,
+        fetch_provider="auto",
+    )
     mock_image.assert_not_called()
     mock_pdf.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_content_passes_provider_overrides():
+    with (
+        patch("mcp_web_tools.loaders.load_image_file", new_callable=AsyncMock),
+        patch("mcp_web_tools.loaders.load_pdf_document", new_callable=AsyncMock),
+        patch("mcp_web_tools.loaders.load_webpage", new_callable=AsyncMock) as mock_webpage,
+    ):
+        mock_webpage.return_value = "forced"
+        result = await load_content(
+            "https://example.com/article",
+            raw=True,
+            fetch_provider="zendriver",
+        )
+
+    assert result == "forced"
+    mock_webpage.assert_awaited_once_with(
+        "https://example.com/article",
+        10_000,
+        0,
+        True,
+        fetch_provider="zendriver",
+    )
 
 
 @pytest.mark.asyncio
@@ -204,7 +292,13 @@ async def test_load_content_wraps_other_exceptions():
         result = await load_content("https://example.com/article")
 
     assert result == "Error loading content from https://example.com/article: boom"
-    mock_webpage.assert_awaited_once_with("https://example.com/article", 10_000, 0, False)
+    mock_webpage.assert_awaited_once_with(
+        "https://example.com/article",
+        10_000,
+        0,
+        False,
+        fetch_provider="auto",
+    )
     mock_image.assert_not_called()
     mock_pdf.assert_not_called()
 
