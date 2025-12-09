@@ -1,9 +1,11 @@
 import asyncio
 import base64
+import io
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from PIL import Image as PILImage
 
 from mcp_web_tools.loaders import (
     capture_webpage_screenshot,
@@ -305,7 +307,11 @@ async def test_load_content_wraps_other_exceptions():
 
 @pytest.mark.asyncio
 async def test_capture_webpage_screenshot_returns_image():
-    screenshot_bytes = b"fakepng"
+    # Create a real small PNG image for the test
+    img = PILImage.new("RGB", (100, 100), color="red")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    screenshot_bytes = buffer.getvalue()
     screenshot_b64 = base64.b64encode(screenshot_bytes).decode()
 
     tab = SimpleNamespace(
