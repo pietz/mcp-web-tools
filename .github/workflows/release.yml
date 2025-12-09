@@ -35,7 +35,7 @@ jobs:
   release_and_publish:
     name: Release from pyproject and Publish (uv)
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -53,11 +53,11 @@ jobs:
         run: python scripts/release.py detect
 
       - name: Set up uv
-        if: steps.version.outputs.release_needed == 'true'
+        if: steps.version.outputs.release_needed == 'true' || github.event_name == 'workflow_dispatch'
         uses: astral-sh/setup-uv@v3
 
       - name: Build package (uv)
-        if: steps.version.outputs.release_needed == 'true'
+        if: steps.version.outputs.release_needed == 'true' || github.event_name == 'workflow_dispatch'
         run: python scripts/release.py build
 
       - name: Create GitHub Release
@@ -71,7 +71,7 @@ jobs:
             dist/*
 
       - name: Publish to PyPI (uv)
-        if: steps.version.outputs.release_needed == 'true'
+        if: steps.version.outputs.release_needed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: PYPI_TOKEN="$UV_PUBLISH_TOKEN" python scripts/release.py publish
