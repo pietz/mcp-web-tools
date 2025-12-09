@@ -241,6 +241,14 @@ async def capture_webpage_screenshot(url: str, *, full_page: bool = False) -> Im
             except Exception as exc:  # pragma: no cover - defensive guard
                 raise RuntimeError(f"Invalid screenshot data: {exc}") from exc
 
+            # Resize image if larger than 6000px in any dimension
+            img = PILImage.open(io.BytesIO(screenshot_bytes))
+            if max(img.size) > 6000:
+                img.thumbnail((6000, 6000))
+                buffer = io.BytesIO()
+                img.save(buffer, format="PNG")
+                screenshot_bytes = buffer.getvalue()
+
             return Image(data=screenshot_bytes, format="png")
 
     except asyncio.TimeoutError:
